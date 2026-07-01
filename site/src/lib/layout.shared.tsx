@@ -1,6 +1,6 @@
 import type { BaseLayoutProps } from "fumadocs-ui/layouts/shared";
-import { DiscordIcon } from "@/components/icons";
-import { appName, discordUrl, gitConfig } from "./shared";
+import { DiscordIcon, XIcon } from "@/components/icons";
+import { appName, discordUrl, gitConfig, twitterUrl } from "./shared";
 
 export function baseOptions(): BaseLayoutProps {
   return {
@@ -32,6 +32,14 @@ export function baseOptions(): BaseLayoutProps {
         text: "Discord",
         icon: <DiscordIcon />,
         url: discordUrl,
+        external: true,
+      },
+      {
+        type: "icon",
+        label: "X",
+        text: "X",
+        icon: <XIcon />,
+        url: twitterUrl,
         external: true,
       },
     ],

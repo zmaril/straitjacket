@@ -9,6 +9,7 @@
 <p align="center">
   <a href="https://straitjacket.dev"><img src="https://img.shields.io/badge/docs-straitjacket.dev-111?logo=readthedocs&logoColor=white" alt="Documentation"></a>
   <a href="https://discord.gg/5G6KvdJffj"><img src="https://img.shields.io/badge/Discord-join%20the%20chat-5865F2?logo=discord&logoColor=white" alt="Join the Discord"></a>
+  <a href="https://x.com/ZackMaril"><img src="https://img.shields.io/badge/X-%40ZackMaril-000?logo=x&logoColor=white" alt="Follow @ZackMaril on X"></a>
 </p>
 
 Straitjacket is a fast, deterministic scanner that flags the weird code and text LLMs like to produce. It sweeps your files against a set of rules — with snobby yet configurable defaults — and flags anything it finds. It's a single static Rust binary with no runtime dependencies, so it drops into almost any environment or repo's CI, regardless of language or stack.
@@ -42,7 +43,7 @@ LLMs invent new tells constantly, and everyone's "Yuck!" is a little different. 
 - **New rules** — a deterministic smell that generalizes across repos.
 - **`slop-prose` in another language** — if you read it and can verify what actually sounds sloppy, say so in the issue (the docs' [slop-prose page](https://straitjacket.dev/docs/explanation/slop-prose) explains why it's English-only for now).
 
-Prefer to talk it through first? [**Join the Discord**](https://discord.gg/5G6KvdJffj).
+Prefer to talk it through first? [**Join the Discord**](https://discord.gg/5G6KvdJffj), or follow [**@ZackMaril** on X](https://x.com/ZackMaril).
 
 ## License
 

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { DiscordIcon } from "@/components/icons";
+import { DiscordIcon, XIcon } from "@/components/icons";
 
 const RULES = [
   {
@@ -96,6 +96,13 @@ export default function HomePage() {
             >
               <DiscordIcon width={18} height={18} />
               Discord
+            </a>
+            <a
+              href="https://x.com/ZackMaril"
+              className="inline-flex items-center gap-2 rounded-full border px-6 py-2.5 text-sm font-medium transition-colors hover:bg-fd-accent"
+            >
+              <XIcon width={16} height={16} />
+              Follow
             </a>
           </div>
 
