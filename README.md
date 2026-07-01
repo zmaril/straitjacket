@@ -14,6 +14,9 @@
 
 Straitjacket is a fast, deterministic scanner that flags the weird code and text LLMs like to produce. It sweeps your files against a set of rules — with snobby yet configurable defaults — and flags anything it finds. It's a single static Rust binary with no runtime dependencies, so it drops into almost any environment or repo's CI, regardless of language or stack.
 
+> [!TIP]
+> **Like Straitjacket?** Try out [**PowderMonkey**](https://github.com/zmaril/powdermonkey) — a (straitjacketed) agent orchestration harness for aspiring slop cannons.
+
 ## Docs
 
 Full documentation — install, usage, every rule, CI setup, and the reasoning behind the checks — lives at **[straitjacket.dev](https://straitjacket.dev)**.

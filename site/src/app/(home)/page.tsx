@@ -116,6 +116,24 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* PowderMonkey cross-promo */}
+      <section className="mx-auto w-full max-w-6xl px-6 py-4">
+        <a
+          href="https://github.com/zmaril/powdermonkey"
+          className="flex flex-col items-start gap-2 rounded-xl border border-fd-primary/30 bg-fd-primary/5 px-5 py-4 transition-colors hover:bg-fd-primary/10 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <span className="text-sm sm:text-base">
+            <span className="font-semibold">Like Straitjacket?</span> Try out{" "}
+            <span className="font-semibold">PowderMonkey</span> — a
+            (straitjacketed) agent orchestration harness for aspiring slop
+            cannons.
+          </span>
+          <span className="whitespace-nowrap text-sm font-medium text-fd-primary">
+            View on GitHub →
+          </span>
+        </a>
+      </section>
+
       {/* What it catches */}
       <section className="mx-auto w-full max-w-6xl px-6 py-8">
         <h2 className="text-2xl font-semibold tracking-tight">
