@@ -17,6 +17,8 @@ jobs:
             os: macos-latest
           - target: x86_64-apple-darwin
             os: macos-13
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -27,10 +29,15 @@ jobs:
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
       - name: Package
+        shell: bash
         run: |
-          tar -czf straitjacket-${{ matrix.target }}.tar.gz \
-            -C target/${{ matrix.target }}/release straitjacket
+          cd "target/${{ matrix.target }}/release"
+          if [[ "${{ matrix.target }}" == *windows* ]]; then
+            7z a "$GITHUB_WORKSPACE/straitjacket-${{ matrix.target }}.zip" straitjacket.exe
+          else
+            tar -czf "$GITHUB_WORKSPACE/straitjacket-${{ matrix.target }}.tar.gz" straitjacket
+          fi
       - name: Upload to release
         uses: softprops/action-gh-release@v2
         with:
-          files: straitjacket-${{ matrix.target }}.tar.gz
+          files: straitjacket-${{ matrix.target }}.*

@@ -1,5 +1,5 @@
 name: straitjacket
-description: Scan the repo for weird code LLMs tend to generate, and fail on findings.
+description: Scan the repo for weird code and text LLMs tend to generate, and fail on findings.
 branding:
   icon: alert-triangle
   color: orange
@@ -9,14 +9,46 @@ inputs:
     description: Release tag to download (e.g. v0.1.0), or "latest".
     required: false
     default: latest
-  args:
-    description: Arguments passed to straitjacket (paths and flags). Default scans the repo root.
-    required: false
-    default: "."
   working-directory:
     description: Directory to run the scan from.
     required: false
     default: "."
+  paths:
+    description: Space-separated paths to scan.
+    required: false
+    default: "."
+  format:
+    description: Output format — text or json.
+    required: false
+    default: text
+  only:
+    description: Run only these rules (comma-separated ids).
+    required: false
+    default: ""
+  skip:
+    description: Skip these rules (comma-separated ids), e.g. "motion,slop-prose".
+    required: false
+    default: ""
+  max-lines:
+    description: file-size line budget (0 disables it). Blank keeps the default (1500).
+    required: false
+    default: ""
+  prose-window:
+    description: slop-prose density window in characters. Blank keeps the default (400).
+    required: false
+    default: ""
+  dup-min-tokens:
+    description: duplication minimum clone size in tokens. Blank keeps the default (50).
+    required: false
+    default: ""
+  no-ignore:
+    description: Set "true" to ignore .gitignore / hidden-file conventions.
+    required: false
+    default: "false"
+  no-fail:
+    description: Set "true" to report findings but always exit 0.
+    required: false
+    default: "false"
 
 runs:
   using: composite
@@ -39,5 +71,27 @@ runs:
 
     - name: Run straitjacket
       shell: bash
-      working-directory: ${{ inputs.working-directory }}
-      run: straitjacket ${{ inputs.args }}
+      working-directory: ${{ inputs['working-directory'] }}
+      env:
+        SJ_PATHS: ${{ inputs.paths }}
+        SJ_FORMAT: ${{ inputs.format }}
+        SJ_ONLY: ${{ inputs.only }}
+        SJ_SKIP: ${{ inputs.skip }}
+        SJ_MAX_LINES: ${{ inputs['max-lines'] }}
+        SJ_PROSE_WINDOW: ${{ inputs['prose-window'] }}
+        SJ_DUP_MIN_TOKENS: ${{ inputs['dup-min-tokens'] }}
+        SJ_NO_IGNORE: ${{ inputs['no-ignore'] }}
+        SJ_NO_FAIL: ${{ inputs['no-fail'] }}
+      run: |
+        set -eo pipefail
+        args=()
+        if [ -n "$SJ_FORMAT" ]; then args+=(--format "$SJ_FORMAT"); fi
+        if [ -n "$SJ_ONLY" ]; then args+=(--only "$SJ_ONLY"); fi
+        if [ -n "$SJ_SKIP" ]; then args+=(--skip "$SJ_SKIP"); fi
+        if [ -n "$SJ_MAX_LINES" ]; then args+=(--max-lines "$SJ_MAX_LINES"); fi
+        if [ -n "$SJ_PROSE_WINDOW" ]; then args+=(--prose-window "$SJ_PROSE_WINDOW"); fi
+        if [ -n "$SJ_DUP_MIN_TOKENS" ]; then args+=(--dup-min-tokens "$SJ_DUP_MIN_TOKENS"); fi
+        if [ "$SJ_NO_IGNORE" = "true" ]; then args+=(--no-ignore); fi
+        if [ "$SJ_NO_FAIL" = "true" ]; then args+=(--no-fail); fi
+        # Word-split $SJ_PATHS so multiple paths become separate arguments.
+        straitjacket "${args[@]}" $SJ_PATHS
