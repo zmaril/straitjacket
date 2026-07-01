@@ -1,0 +1,30 @@
+version: 2
+updates:
+  # Rust crate dependencies (Cargo.toml / Cargo.lock).
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      cargo-minor:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # GitHub Actions used by the workflows and the composite action.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # The docs site's npm dependencies.
+  - package-ecosystem: npm
+    directory: "/site"
+    schedule:
+      interval: weekly
+    groups:
+      site-minor:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
