@@ -14,9 +14,9 @@ inputs:
     required: false
     default: "."
   paths:
-    description: Space-separated paths to scan.
+    description: Space-separated paths to scan. Blank uses `.straitjacket.yaml`'s paths, else ".".
     required: false
-    default: "."
+    default: ""
   format:
     description: Output format — text or json.
     required: false
