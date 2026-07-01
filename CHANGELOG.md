@@ -6,7 +6,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-The first tagged release (0.1.0) is being prepared; everything below ships in it.
+Nothing yet — this is the top of the 0.2.0 development cycle.
+
+## [0.1.0] - 2026-07-01
 
 ### Added
 
@@ -40,4 +42,5 @@ The first tagged release (0.1.0) is being prepared; everything below ships in it
   (Fumadocs), organized by Diátaxis.
 - **License** — MIT.
 
-[Unreleased]: https://github.com/zmaril/straitjacket/commits/main
+[Unreleased]: https://github.com/zmaril/straitjacket/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/zmaril/straitjacket/releases/tag/v0.1.0
