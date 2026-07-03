@@ -39,7 +39,9 @@ As for slop text, it just smells. There's no way around it, and I don't like it.
 
 Straitjacket has become an exercise in me encoding as much of my personal tastes as I can into deterministic checkers I can run across LLM output, hopefully saving me the trouble of having to go "Yuck!" myself.
 
-## Found a new smell?
+## Contributing
+
+Found a new smell?
 
 LLMs invent new tells constantly, and everyone's "Yuck!" is a little different. If you've spotted a pattern straitjacket should catch — or a false positive it shouldn't! — [**file an issue**](https://github.com/zmaril/straitjacket/issues). Concrete examples help most. Two things especially wanted:
 
