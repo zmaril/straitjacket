@@ -1,4 +1,4 @@
-name: straitjacket
+name: Powderworks Straitjacket
 description: Scan the repo for weird code and text LLMs tend to generate, and fail on findings.
 branding:
   icon: alert-triangle
