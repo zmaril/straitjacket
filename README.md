@@ -8,6 +8,7 @@
 
 <p align="center">
   <a href="https://straitjacket.dev"><img src="https://img.shields.io/badge/docs-straitjacket.dev-111?logo=readthedocs&logoColor=white" alt="Documentation"></a>
+  <a href="https://github.com/marketplace/actions/powderworks-straitjacket"><img src="https://img.shields.io/badge/marketplace-powderworks--straitjacket-2088FF?logo=githubactions&logoColor=white" alt="Powderworks Straitjacket on the GitHub Marketplace"></a>
   <a href="https://discord.gg/5G6KvdJffj"><img src="https://img.shields.io/badge/Discord-join%20the%20chat-5865F2?logo=discord&logoColor=white" alt="Join the Discord"></a>
   <a href="https://x.com/ZackMaril"><img src="https://img.shields.io/badge/X-%40ZackMaril-000?logo=x&logoColor=white" alt="Follow @ZackMaril on X"></a>
 </p>
