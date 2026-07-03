@@ -58,6 +58,11 @@ struct Cli {
     #[arg(long)]
     no_fail: bool,
 
+    /// Also write a SARIF 2.1.0 report to this file (alongside the stdout output),
+    /// for `github/codeql-action/upload-sarif`.
+    #[arg(long, value_name = "PATH")]
+    sarif: Option<PathBuf>,
+
     /// Use this config file instead of discovering `.straitjacket.yaml`.
     #[arg(long, value_name = "PATH")]
     config: Option<PathBuf>,
@@ -79,6 +84,8 @@ struct Cli {
 enum Format {
     Text,
     Json,
+    /// SARIF 2.1.0, for `github/codeql-action/upload-sarif`.
+    Sarif,
 }
 
 /// The effective settings after layering CLI flags over the config file over the
@@ -194,6 +201,18 @@ fn main() -> ExitCode {
 
     report(&resolved.format, &findings, files.len());
 
+    // A side-channel SARIF file, so a run can print readable text *and* hand SARIF to
+    // code scanning in one pass.
+    if let Some(path) = &cli.sarif {
+        let doc = straitjacket::sarif::to_sarif(&findings, env!("CARGO_PKG_VERSION"));
+        if let Err(e) = fs::write(path, doc) {
+            eprintln!(
+                "straitjacket: failed to write SARIF to {}: {e}",
+                path.display()
+            );
+        }
+    }
+
     let has_error = findings.iter().any(|f| f.severity == Severity::Error);
     if has_error && !resolved.no_fail {
         ExitCode::FAILURE
@@ -284,7 +303,10 @@ fn parse_format(s: &str) -> anyhow::Result<Format> {
     match s.trim().to_ascii_lowercase().as_str() {
         "text" => Ok(Format::Text),
         "json" => Ok(Format::Json),
-        other => anyhow::bail!("invalid format '{other}' in config (expected text or json)"),
+        "sarif" => Ok(Format::Sarif),
+        other => {
+            anyhow::bail!("invalid format '{other}' in config (expected text, json, or sarif)")
+        }
     }
 }
 
@@ -349,6 +371,12 @@ fn report_prop_chains(paths: &[PathBuf], respect_ignore: bool) -> ExitCode {
 
 fn report(format: &Format, findings: &[Finding], file_count: usize) {
     match format {
+        Format::Sarif => {
+            println!(
+                "{}",
+                straitjacket::sarif::to_sarif(findings, env!("CARGO_PKG_VERSION"))
+            );
+        }
         Format::Json => {
             let json = serde_json::to_string_pretty(findings).unwrap_or_else(|_| "[]".to_string());
             println!("{json}");

@@ -5,16 +5,22 @@ description: The bundled composite Action and its typed inputs.
 
 The `zmaril/straitjacket` GitHub Action downloads the prebuilt binary and runs it
 over your repo in one self-contained pass. It fails the job on any error-level
-finding. For a walkthrough see [Add Straitjacket to CI](/docs/guides/ci); this
-page is the input reference.
+finding, and by default uploads its findings to GitHub code scanning as SARIF
+(annotations on the PR diff). For a walkthrough see
+[Add Straitjacket to CI](/docs/guides/ci); this page is the input reference.
 
 ## Usage
 
 ```yaml
-- uses: zmaril/straitjacket@v0.1.0
-  with:
-    paths: "src tests"
-    skip: "motion,slop-prose"
+permissions:
+  security-events: write   # so the default SARIF upload can post annotations
+  contents: read
+steps:
+  - uses: actions/checkout@v4
+  - uses: zmaril/straitjacket@v0.2.0
+    with:
+      paths: "src tests"
+      skip: "motion,slop-prose"
 ```
 
 ## Inputs
@@ -27,7 +33,8 @@ own defaults.
 | `version` | `latest` | which release to download (`latest` or a pinned tag) |
 | `working-directory` | `.` | directory to run the scan from |
 | `paths` | `.` | paths to scan (space-separated) |
-| `format` | `text` | `--format` (`text` or `json`) |
+| `format` | `text` | `--format` for the job-log output (`text`, `json`, or `sarif`) |
+| `sarif` | `true` | **On by default.** Writes SARIF and uploads it to code scanning (annotations on the PR diff and in the Security tab), then gates on findings — you get annotations *and* the gate. Grant `security-events: write` for the upload; without it the upload is skipped but the scan still gates. Set `"false"` to disable. See [SARIF / inline PR annotations](/docs/guides/ci#sarif--inline-pr-annotations). |
 | `only` | — | `--only` (comma-separated rule ids) |
 | `skip` | — | `--skip` (comma-separated rule ids) |
 | `max-lines` | `1500` | `--max-lines` (0 disables `file-size`) |

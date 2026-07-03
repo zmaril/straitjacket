@@ -13,6 +13,7 @@ pub mod finding;
 pub mod prop_graph;
 pub mod react;
 pub mod rules;
+pub mod sarif;
 pub mod slop_prose;
 pub mod walk;
 

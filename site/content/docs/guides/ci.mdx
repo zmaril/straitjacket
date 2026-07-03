@@ -6,7 +6,9 @@ description: Run Straitjacket on every push with the bundled GitHub Action, and 
 Straitjacket is built to fail CI when it finds slop. The bundled GitHub Action
 downloads the prebuilt binary and runs it over your repo — every rule, including
 [duplication](/docs/explanation/duplication), in one self-contained pass. It
-fails the job on any error-level finding.
+fails the job on any error-level finding, and by default posts those findings to
+GitHub code scanning as [SARIF](#sarif--inline-pr-annotations) — annotations
+right on the PR diff.
 
 ## Minimal setup
 
@@ -18,20 +20,25 @@ on: [push, pull_request]
 jobs:
   scan:
     runs-on: ubuntu-latest
+    permissions:
+      security-events: write   # let the default SARIF upload post annotations
+      contents: read
     steps:
       - uses: actions/checkout@v4
-      - uses: zmaril/straitjacket@v0.1.0
+      - uses: zmaril/straitjacket@v0.2.0
 ```
 
 That's the whole thing. No toolchain to set up, no Node — the Action fetches a
-single static binary and runs it.
+single static binary and runs it. The `security-events: write` permission lets it
+post findings as PR annotations; leave it off and the scan still runs and gates,
+you just don't get the annotations.
 
 ## Configure it
 
 Pass typed fields rather than a raw argument string. Each maps to a CLI flag:
 
 ```yaml
-      - uses: zmaril/straitjacket@v0.1.0
+      - uses: zmaril/straitjacket@v0.2.0
         with:
           paths: "src tests"     # default "."
           skip: "motion,slop-prose"
@@ -39,7 +46,8 @@ Pass typed fields rather than a raw argument string. Each maps to a CLI flag:
           max-lines: "800"       # file-size budget (0 disables)
           prose-window: "600"    # slop-prose density window
           dup-min-tokens: "80"   # duplication clone size
-          format: "text"         # or "json"
+          format: "text"         # job-log format — or "json"
+          sarif: "true"          # upload to code scanning (default)
           no-ignore: "false"
           no-fail: "false"
           working-directory: "."
@@ -55,9 +63,42 @@ To surface findings without failing the build (useful while you're adopting it),
 set `no-fail`:
 
 ```yaml
-      - uses: zmaril/straitjacket@v0.1.0
+      - uses: zmaril/straitjacket@v0.2.0
         with:
           no-fail: "true"
+```
+
+## SARIF / inline PR annotations
+
+The Action uploads its findings to **GitHub code scanning** as SARIF **by
+default** — they show as annotations on the PR diff and in the repo's Security
+tab, right where the reviewer is looking. It **still fails the job on findings**
+(a straitjacket is tight) — the SARIF uploads first, so you get the annotations
+*and* the gate.
+
+All the [minimal setup](#minimal-setup) needs is the `security-events: write`
+permission so the upload can post. That permission is the only extra step:
+
+```yaml
+    permissions:
+      security-events: write
+      contents: read
+```
+
+Under the hood, in one pass the Action writes a readable text report to the job
+log **and** a side SARIF file, uploads the SARIF with
+`github/codeql-action/upload-sarif`, then fails the job on findings. Adopting
+gradually and want annotations without failing? Add `no-fail: "true"`. Don't want
+code scanning at all? Set `sarif: "false"` — it falls back to a plain text scan
+that still gates.
+
+Without the `security-events: write` permission the upload step is skipped
+gracefully: no annotations, but the scan still runs and gates on findings.
+
+Outside the Action, produce SARIF yourself:
+
+```sh
+straitjacket --format sarif --no-fail > straitjacket.sarif
 ```
 
 ## Other CI systems

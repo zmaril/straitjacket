@@ -6,13 +6,15 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Fixed
+### Added
 
-- **`inline-font`** no longer flags a font *token reference* — `fontFamily: MONO`
-  (a variable, the good pattern) and bare generic families (`monospace`,
-  `sans-serif`) are allowed. Only a quoted font or a hardcoded multi-family stack
-  (`Inter, sans-serif`) is flagged. Also fixes a false positive on a single-line JS
-  object where the property-separator comma was read as a font fallback.
+- **SARIF output** — `--format sarif` emits SARIF 2.1.0 for GitHub code scanning,
+  and a new `--sarif <PATH>` flag writes SARIF to a file *alongside* the normal
+  stdout report (readable log **and** code-scanning upload in one pass). The GitHub
+  Action now uploads SARIF **by default**: findings show as annotations on the PR
+  diff and in the Security tab (grant `security-events: write`; without it the
+  upload is skipped gracefully and the scan still gates). The job still fails on
+  findings — `no-fail: "true"` opts out, `sarif: "false"` disables the upload.
 
 ### Changed
 
@@ -24,6 +26,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Upgrade the OXC crates (`oxc_parser`, `oxc_semantic`, and the rest) from 0.133
   to 0.138. The React rules now build the semantic node arena explicitly
   (`with_build_nodes(true)`), required as of 0.138.
+
+### Fixed
+
+- **`inline-font`** no longer flags a font *token reference* — `fontFamily: MONO`
+  (a variable, the good pattern) and bare generic families (`monospace`,
+  `sans-serif`) are allowed. Only a quoted font or a hardcoded multi-family stack
+  (`Inter, sans-serif`) is flagged. Also fixes a false positive on a single-line JS
+  object where the property-separator comma was read as a font fallback.
 
 ## [0.1.0] - 2026-07-01
 

@@ -32,7 +32,7 @@ straitjacket --no-fail            # report but always exit 0
 | flag | default | effect |
 |------|---------|--------|
 | `[PATHS]...` | `.` | Files or directories to scan. |
-| `--format <text\|json>` | `text` | Output format. `json` is machine-readable. |
+| `--format <text\|json\|sarif>` | `text` | Output format. `json` is machine-readable; `sarif` emits SARIF 2.1.0 for [GitHub code scanning](/docs/guides/ci#sarif--inline-pr-annotations). |
 | `--only <ids>` | — | Run only these rules (comma-separated ids). |
 | `--skip <ids>` | — | Skip these rules (comma-separated ids). |
 | `--max-lines <n>` | `1500` | `file-size` line budget. `0` disables the rule. |

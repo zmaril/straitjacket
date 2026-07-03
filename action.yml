@@ -18,9 +18,18 @@ inputs:
     required: false
     default: ""
   format:
-    description: Output format — text or json.
+    description: Output format — text, json, or sarif.
     required: false
     default: text
+  sarif:
+    description: >-
+      Upload findings to GitHub code scanning as SARIF (annotations on the PR diff and
+      in the Security tab). On by default — the native GitHub experience. Grant
+      `permissions: { security-events: write }` in the workflow to enable the upload;
+      without it the upload is skipped but the scan still runs and gates. The job still
+      fails on findings (set no-fail to opt out). Set "false" to disable SARIF entirely.
+    required: false
+    default: "true"
   only:
     description: Run only these rules (comma-separated ids).
     required: false
@@ -82,16 +91,47 @@ runs:
         SJ_DUP_MIN_TOKENS: ${{ inputs['dup-min-tokens'] }}
         SJ_NO_IGNORE: ${{ inputs['no-ignore'] }}
         SJ_NO_FAIL: ${{ inputs['no-fail'] }}
+        SJ_SARIF: ${{ inputs.sarif }}
       run: |
         set -eo pipefail
         args=()
+        # Readable text goes to the job log; in SARIF mode a side `--sarif` file is
+        # written in the same pass for the upload step.
         if [ -n "$SJ_FORMAT" ]; then args+=(--format "$SJ_FORMAT"); fi
+        # A straitjacket is tight: fail on findings by default (SARIF or not).
+        # `no-fail: "true"` opts out — the SARIF still uploads either way.
+        if [ "$SJ_NO_FAIL" = "true" ]; then args+=(--no-fail); fi
+        if [ "$SJ_SARIF" = "true" ]; then args+=(--sarif "$RUNNER_TEMP/straitjacket.sarif"); fi
         if [ -n "$SJ_ONLY" ]; then args+=(--only "$SJ_ONLY"); fi
         if [ -n "$SJ_SKIP" ]; then args+=(--skip "$SJ_SKIP"); fi
         if [ -n "$SJ_MAX_LINES" ]; then args+=(--max-lines "$SJ_MAX_LINES"); fi
         if [ -n "$SJ_PROSE_WINDOW" ]; then args+=(--prose-window "$SJ_PROSE_WINDOW"); fi
         if [ -n "$SJ_DUP_MIN_TOKENS" ]; then args+=(--dup-min-tokens "$SJ_DUP_MIN_TOKENS"); fi
         if [ "$SJ_NO_IGNORE" = "true" ]; then args+=(--no-ignore); fi
-        if [ "$SJ_NO_FAIL" = "true" ]; then args+=(--no-fail); fi
         # Word-split $SJ_PATHS so multiple paths become separate arguments.
-        straitjacket "${args[@]}" $SJ_PATHS
+        if [ "$SJ_SARIF" = "true" ]; then
+          # Capture the exit code (findings) but keep going, so the SARIF still uploads
+          # before the gate step decides whether to fail the job.
+          set +e
+          straitjacket "${args[@]}" $SJ_PATHS
+          echo "SJ_EXIT=$?" >> "$GITHUB_ENV"
+        else
+          straitjacket "${args[@]}" $SJ_PATHS
+        fi
+
+    - name: Upload SARIF to code scanning
+      # Skipped gracefully when the workflow hasn't granted security-events: write —
+      # the scan still runs and gates, you just don't get the annotations.
+      if: ${{ inputs.sarif == 'true' && hashFiles(format('{0}/straitjacket.sarif', runner.temp)) != '' }}
+      continue-on-error: true
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ runner.temp }}/straitjacket.sarif
+        category: straitjacket
+
+    - name: Fail on findings
+      if: ${{ inputs.sarif == 'true' }}
+      shell: bash
+      env:
+        SJ_EXIT: ${{ env.SJ_EXIT }}
+      run: exit "${SJ_EXIT:-0}"
