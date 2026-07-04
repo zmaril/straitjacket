@@ -6,6 +6,16 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-07-04
+
+### Fixed
+
+- **`duplication`** findings now honour `straitjacket-allow` markers. The cross-file
+  copy/paste pass runs separately from the per-file rules, so `allow-file:duplication`
+  (and line-scoped `straitjacket-allow`) had no effect on a clone — you couldn't
+  suppress a genuinely-coincidental duplicate, which blocked gating a repo on
+  duplication. They're now filtered through the same suppression the other rules use.
+
 ## [0.2.1] - 2026-07-03
 
 ### Fixed
@@ -80,7 +90,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (Fumadocs), organized by Diátaxis.
 - **License** — MIT.
 
-[Unreleased]: https://github.com/zmaril/straitjacket/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/zmaril/straitjacket/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/zmaril/straitjacket/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/zmaril/straitjacket/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/zmaril/straitjacket/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/zmaril/straitjacket/releases/tag/v0.1.0

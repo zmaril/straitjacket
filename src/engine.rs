@@ -511,3 +511,54 @@ impl FileAllow {
         self.all || self.rules.iter().any(|r| r == id)
     }
 }
+
+/// Whether a finding for rule `id` at 1-based `line` in a file whose contents are `text`
+/// is suppressed by a `straitjacket-allow`/`-file` marker. The per-file rules apply this
+/// as they scan (via `LineCtx`); the cross-file duplication pass runs separately, so it
+/// calls this afterwards to honour the same markers.
+pub fn is_suppressed(text: &str, line: usize, id: &str) -> bool {
+    if text.contains(ALLOW_FILE) && FileAllow::scan(text).covers(id) {
+        return true;
+    }
+    if line > 0 {
+        if let Some(l) = text.lines().nth(line - 1) {
+            if scope_covers(&line_scope(l), id) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+#[cfg(test)]
+mod suppress_tests {
+    use super::is_suppressed;
+
+    #[test]
+    fn file_marker_suppresses_the_named_rule() {
+        let text = "// straitjacket-allow-file:duplication reason\nfoo\nbar\n";
+        assert!(is_suppressed(text, 2, "duplication"));
+        // ...but only that rule.
+        assert!(!is_suppressed(text, 2, "color"));
+    }
+
+    #[test]
+    fn bare_file_marker_suppresses_any_rule() {
+        let text = "// straitjacket-allow-file generated\nfoo\n";
+        assert!(is_suppressed(text, 2, "duplication"));
+        assert!(is_suppressed(text, 2, "color"));
+    }
+
+    #[test]
+    fn line_marker_suppresses_its_own_line() {
+        let text = "foo\nbar // straitjacket-allow:duplication\nbaz\n";
+        assert!(is_suppressed(text, 2, "duplication"));
+        assert!(!is_suppressed(text, 1, "duplication"));
+        assert!(!is_suppressed(text, 3, "duplication"));
+    }
+
+    #[test]
+    fn no_marker_is_not_suppressed() {
+        assert!(!is_suppressed("just some code\n", 1, "duplication"));
+    }
+}

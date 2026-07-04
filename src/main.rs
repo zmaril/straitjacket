@@ -191,12 +191,20 @@ fn main() -> ExitCode {
         } else {
             Vec::new()
         };
-        findings.extend(duplication::detect(
+        // Duplication is a separate cross-file pass (cpd-finder), so its findings don't
+        // flow through the per-file `straitjacket-allow` filter — apply the same
+        // suppression here so `allow-file:duplication` (and line markers) work for it too.
+        let dups = duplication::detect(
             &resolved.paths,
             resolved.respect_ignore(),
             min_tokens,
             &ignore,
-        ));
+        );
+        findings.extend(dups.into_iter().filter(|f| {
+            fs::read_to_string(&f.path)
+                .map(|text| !straitjacket::engine::is_suppressed(&text, f.line, &f.rule))
+                .unwrap_or(true)
+        }));
     }
 
     report(&resolved.format, &findings, files.len());
