@@ -6,6 +6,16 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-07-04
+
+### Fixed
+
+- **`duplication` in Markdown** now honours `straitjacket-allow` markers too. A clone
+  inside a doc's fenced code block carries a `:<lang>` tag on its source id (e.g.
+  `docs.md:bash`), so the finding's path wasn't a real file — the suppression added in
+  0.2.2 couldn't open it and the marker was ignored. The `:<lang>` tag is now stripped,
+  which also tidies the reported path.
+
 ## [0.2.2] - 2026-07-04
 
 ### Fixed
@@ -90,7 +100,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (Fumadocs), organized by Diátaxis.
 - **License** — MIT.
 
-[Unreleased]: https://github.com/zmaril/straitjacket/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/zmaril/straitjacket/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/zmaril/straitjacket/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/zmaril/straitjacket/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/zmaril/straitjacket/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/zmaril/straitjacket/compare/v0.1.0...v0.2.0

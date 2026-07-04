@@ -60,7 +60,46 @@ pub fn detect(
         .collect()
 }
 
-/// Drop a leading `./` from a source path for display.
+/// Clean a cpd-finder source id into a readable, openable path: drop a leading `./`,
+/// and drop the trailing `:<lang>` tag it appends to name the (fenced-code) language of
+/// a clone inside a document — e.g. `docs.md:bash`, `notes.md:markdown`. Without this the
+/// finding's path isn't a real file, so it reads oddly *and* the `straitjacket-allow`
+/// suppression (which opens the path) silently fails to apply to markdown clones.
 fn tidy(path: &str) -> String {
-    path.strip_prefix("./").unwrap_or(path).to_string()
+    let path = path.strip_prefix("./").unwrap_or(path);
+    if let Some((head, lang)) = path.rsplit_once(':') {
+        // Only a genuine language tag: a run of ASCII letters trailing an actual
+        // filename. Leaves real path colons (a Windows drive, say) alone.
+        let looks_like_path = head.contains('/') || head.contains('.');
+        if !lang.is_empty() && lang.bytes().all(|b| b.is_ascii_alphabetic()) && looks_like_path {
+            return head.to_string();
+        }
+    }
+    path.to_string()
+}
+
+#[cfg(test)]
+mod tidy_tests {
+    use super::tidy;
+
+    #[test]
+    fn strips_leading_dot_slash() {
+        assert_eq!(tidy("./src/app.ts"), "src/app.ts");
+    }
+
+    #[test]
+    fn strips_trailing_language_tag() {
+        assert_eq!(tidy("notes/docs.md:bash"), "notes/docs.md");
+        assert_eq!(tidy("README.md:markdown"), "README.md");
+        assert_eq!(tidy("/abs/path/docs.md:bash"), "/abs/path/docs.md");
+    }
+
+    #[test]
+    fn leaves_ordinary_paths_untouched() {
+        assert_eq!(tidy("src/server/app.ts"), "src/server/app.ts");
+        // A Windows drive colon must survive (the tag would follow the filename).
+        assert_eq!(tidy(r"C:\proj\docs.md:markdown"), r"C:\proj\docs.md");
+        // A bare `word:word` with no path shape isn't treated as a tag.
+        assert_eq!(tidy("foo:bar"), "foo:bar");
+    }
 }

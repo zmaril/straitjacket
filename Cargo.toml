@@ -1,6 +1,6 @@
 [package]
 name = "straitjacket"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2021"
 description = "Flags weird code that LLMs tend to generate, ahead of time — a slop scanner for CI."
 license = "MIT"
