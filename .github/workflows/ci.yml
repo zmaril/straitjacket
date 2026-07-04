@@ -4,8 +4,37 @@ on:
     branches: [main]
   pull_request:
 
+# Each job runs only when files that could affect it changed, gated off the `changes`
+# filter. Job-level `if:` (not a workflow `paths:` filter) on purpose: a job skipped by
+# `if:` reports "skipped", which a required status check treats as success — so a
+# docs-site-only PR still satisfies the required Rust checks (and vice-versa), whereas a
+# `paths:` filter would leave the required check pending forever and wedge the merge.
+
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      rust: ${{ steps.filter.outputs.rust }}
+      site: ${{ steps.filter.outputs.site }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            rust:
+              - 'src/**'
+              - 'tests/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - '.github/workflows/ci.yml'
+            site:
+              - 'site/**'
+              - '.github/workflows/ci.yml'
+
   lint:
+    needs: changes
+    if: ${{ needs.changes.outputs.rust == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -19,6 +48,8 @@ jobs:
         run: cargo clippy --all-targets --all-features -- -D warnings
 
   test:
+    needs: changes
+    if: ${{ needs.changes.outputs.rust == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -33,6 +64,8 @@ jobs:
   # package.json drift (e.g. a Dependabot bump that didn't touch the lockfile),
   # and the build catches anything that would break the static export.
   site:
+    needs: changes
+    if: ${{ needs.changes.outputs.site == 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:
