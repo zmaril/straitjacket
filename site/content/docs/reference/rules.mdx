@@ -25,6 +25,43 @@ Run `straitjacket --list-rules` to see them with their one-line descriptions.
 | `slop-prose` | LLM prose tells in `.md`/`.markdown`/`.mdx`/`.html`: machine artifacts hard-fail, and a high *density* of style tells warns or fails. Disable with `--skip slop-prose`. See [How slop-prose works](/docs/explanation/slop-prose). |
 | `duplication` | copy/pasted code across the tree — any clone of ≥ 50 tokens fails; **a structure may appear only once**. Compiled in (no external tool). Tune with `--dup-min-tokens`, disable with `--skip duplication`. See [Why duplication is compiled in](/docs/explanation/duplication). |
 
+### `deep-nesting` and embedded DSLs
+
+`deep-nesting` reads depth from leading indentation and deliberately does **not**
+tokenize the language — that's what keeps it a single, language-agnostic pass. The
+trade-off: a multi-line **string literal** that embeds an indented DSL — YAML or
+JSON in a Python `"""…"""`, an HTML/SQL heredoc, a template literal — is counted as
+if that indentation were code nesting, so a deep enough block can trip the rule even
+though the surrounding code is flat.
+
+This is by design, not a bug to detect around: reliably knowing "am I inside a string
+literal?" needs a per-language parser, which the rule exists to avoid. Suppress the
+false positive with a marker instead.
+
+For a file that carries a lot of embedded DSL — test fixtures, template modules — a
+**file-scoped** marker is cleanest, because it's a real comment outside any string
+and doesn't touch the literal's contents:
+
+```python
+# straitjacket-allow-file:deep-nesting — this module is embedded YAML fixtures
+```
+
+A **line-scoped** marker also works — but it has to sit on the line the finding
+points at, which for embedded content is *inside* the string literal, so it becomes
+part of that text (usually fine as a DSL comment, but check it doesn't change what
+the fixture means):
+
+```python
+CI = """\
+jobs:
+  build:
+    steps:
+      - run: deep | embedded | yaml  # straitjacket-allow:deep-nesting
+"""
+```
+
+See [Suppression markers](/docs/reference/suppression-markers) for the full syntax.
+
 ## React rules
 
 The following rules are **React-specific** and only ever fire on `.tsx`/`.jsx`,

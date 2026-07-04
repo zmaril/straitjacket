@@ -16,6 +16,12 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   with `--max-nesting 0` or `--skip deep-nesting`, or exempt deeper-by-design code
   with an allow marker. Grounded in Dan Luu's *essential-complexity* (see
   `notes/danluu-review.md`). Closes #45.
+  - Known limitation, now documented: because it doesn't tokenize the language,
+    indentation inside a multi-line **string literal** (embedded YAML/JSON, an
+    HTML/SQL heredoc, a template literal) counts as nesting and can trip the rule
+    in otherwise-flat code. Suppress it with a `deep-nesting` allow marker —
+    file-scoped for fixture-heavy files, line-scoped otherwise. See the
+    [rules reference](https://straitjacket.dev/docs/reference/rules).
 
 ## [0.2.3] - 2026-07-04
 
