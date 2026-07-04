@@ -13,6 +13,7 @@ use regex::RegexSet;
 
 use crate::config::Config;
 use crate::finding::{Finding, Severity};
+use crate::nesting::{self, DEEP_NESTING_ID, NEST_EXTS};
 use crate::react::{
     self, ComponentIndex, EFFECT_ID, ONE_COMPONENT_ID, PROP_DRILLING_ID, REACT_EXTS,
     STORE_PASSTHROUGH_ID,
@@ -60,6 +61,9 @@ pub struct Engine {
     /// `file-size` line budget, and whether the rule is enabled.
     max_lines: usize,
     file_size_enabled: bool,
+    /// `deep-nesting` indentation-depth budget, and whether the rule is enabled.
+    max_nesting: usize,
+    nesting_enabled: bool,
     /// The `slop-prose` analyzer, present only when enabled.
     slop_prose: Option<SlopProse>,
     /// `Some(min_tokens)` when the cross-file `duplication` rule is enabled. Run by
@@ -103,6 +107,8 @@ impl Engine {
             enabled,
             max_lines: config.max_lines.unwrap_or(usize::MAX),
             file_size_enabled: config.max_lines.is_some(),
+            max_nesting: config.max_nesting.unwrap_or(usize::MAX),
+            nesting_enabled: config.max_nesting.is_some(),
             slop_prose: config
                 .slop_prose
                 .then(|| SlopProse::new(config.prose_window)),
@@ -147,6 +153,7 @@ impl Engine {
     pub fn rule_ids(&self) -> Vec<&'static str> {
         let mut ids: Vec<&'static str> = self.rules.iter().map(|r| r.id()).collect();
         ids.push(FILE_SIZE_ID);
+        ids.push(DEEP_NESTING_ID);
         if self.slop_prose.is_some() {
             ids.push(SLOP_PROSE_ID);
         }
@@ -174,6 +181,10 @@ impl Engine {
             FILE_SIZE_ID => Some(format!(
                 "file longer than {} lines — sprawling single files are a common LLM tell; split it up.",
                 self.max_lines
+            )),
+            DEEP_NESTING_ID => Some(format!(
+                "code nested deeper than {} levels — deeply nested logic is hard to follow; extract or flatten it.",
+                self.max_nesting
             )),
             SLOP_PROSE_ID => Some(
                 "prose that reads like LLM output — machine artifacts hard-fail; a high density of style tells warns/fails.".to_string(),
@@ -208,6 +219,7 @@ impl Engine {
             self.enabled[i] = ids.iter().any(|id| id == rule.id());
         }
         self.file_size_enabled = self.file_size_enabled && ids.iter().any(|id| id == FILE_SIZE_ID);
+        self.nesting_enabled = self.nesting_enabled && ids.iter().any(|id| id == DEEP_NESTING_ID);
         if !ids.iter().any(|id| id == SLOP_PROSE_ID) {
             self.slop_prose = None;
         }
@@ -231,6 +243,9 @@ impl Engine {
         }
         if ids.iter().any(|id| id == FILE_SIZE_ID) {
             self.file_size_enabled = false;
+        }
+        if ids.iter().any(|id| id == DEEP_NESTING_ID) {
+            self.nesting_enabled = false;
         }
         if ids.iter().any(|id| id == SLOP_PROSE_ID) {
             self.slop_prose = None;
@@ -260,6 +275,7 @@ impl Engine {
         let mut known: Vec<&str> = self.rules.iter().map(|r| r.id()).collect();
         known.extend([
             FILE_SIZE_ID,
+            DEEP_NESTING_ID,
             SLOP_PROSE_ID,
             DUPLICATION_ID,
             ONE_COMPONENT_ID,
@@ -284,6 +300,7 @@ impl Engine {
             .enumerate()
             .any(|(i, r)| self.enabled[i] && r.applies_to_ext(ext))
             || (self.file_size_enabled && SIZE_EXTS.contains(&ext))
+            || (self.nesting_enabled && NEST_EXTS.contains(&ext))
             || (self.slop_prose.is_some() && PROSE_EXTS.contains(&ext))
             || (self.react_enabled() && REACT_EXTS.contains(&ext))
     }
@@ -311,9 +328,15 @@ impl Engine {
             .map(|(i, r)| self.enabled[i] && r.applies_to_ext(ext))
             .collect();
         let size_applies = self.file_size_enabled && SIZE_EXTS.contains(&ext);
+        let nest_applies = self.nesting_enabled && NEST_EXTS.contains(&ext);
         let prose_applies = self.slop_prose.is_some() && PROSE_EXTS.contains(&ext);
         let react_applies = self.react_enabled() && REACT_EXTS.contains(&ext);
-        if applies.iter().all(|b| !b) && !size_applies && !prose_applies && !react_applies {
+        if applies.iter().all(|b| !b)
+            && !size_applies
+            && !nest_applies
+            && !prose_applies
+            && !react_applies
+        {
             return findings;
         }
 
@@ -361,6 +384,21 @@ impl Engine {
                 ),
                 severity: Severity::Error,
             });
+        }
+
+        // Whole-file nesting rule: indentation depth over budget. Findings are
+        // per line, so a line-scoped `straitjacket-allow` on the offending line
+        // silences it (same idiom as the React rules below).
+        if nest_applies && !file_allow.covers(DEEP_NESTING_ID) {
+            for f in nesting::scan(text, path, self.max_nesting) {
+                let allowed = text
+                    .lines()
+                    .nth(f.line - 1)
+                    .is_some_and(|l| scope_covers(&line_scope(l), &f.rule));
+                if !allowed {
+                    findings.push(f);
+                }
+            }
         }
 
         // Whole-text prose analyzer.

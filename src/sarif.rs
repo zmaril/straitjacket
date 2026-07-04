@@ -1,6 +1,10 @@
 //! SARIF 2.1.0 output, for GitHub code scanning: uploaded via
 //! `github/codeql-action/upload-sarif`, each finding renders as an annotation on the
 //! line it points at (and in the repo's Security tab).
+//!
+//! straitjacket-allow-file:deep-nesting — the document is one hand-written
+//! `json!({ … })` literal, so the indentation is structural nesting of data, not
+//! deeply nested logic.
 
 use std::collections::BTreeMap;
 

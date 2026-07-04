@@ -25,6 +25,8 @@ pub struct FileConfig {
     pub skip: Option<Vec<String>>,
     /// `file-size` line budget (0 disables the rule).
     pub max_lines: Option<usize>,
+    /// `deep-nesting` indentation-depth budget (0 disables the rule).
+    pub max_nesting: Option<usize>,
     /// `slop-prose` density window, in characters.
     pub prose_window: Option<usize>,
     /// `duplication` minimum clone size, in tokens.
@@ -66,6 +68,11 @@ pub fn load_config(path: &Path) -> anyhow::Result<FileConfig> {
 /// single files; 1500 lines is a generous ceiling before that's worth a look.
 pub const DEFAULT_MAX_LINES: usize = 1500;
 
+/// Default nesting budget for the `deep-nesting` rule. Beyond ~6 levels of block
+/// indentation a reader has to hold too many contexts at once; it's a warn, not a
+/// hard fail, since parsers and state machines legitimately go deeper.
+pub const DEFAULT_MAX_NESTING: usize = 6;
+
 /// Default sliding-window size (in bytes/chars) for the `slop-prose` density check.
 pub const DEFAULT_PROSE_WINDOW: usize = 400;
 
@@ -76,6 +83,8 @@ pub const DEFAULT_DUP_MIN_TOKENS: usize = 50;
 pub struct Config {
     /// Line budget for the `file-size` rule. `None` disables the rule.
     pub max_lines: Option<usize>,
+    /// Indentation-depth budget for the `deep-nesting` rule. `None` disables it.
+    pub max_nesting: Option<usize>,
     /// Run the `slop-prose` analyzer. On by default — straitjacket runs at its max
     /// and you ratchet down with `--skip slop-prose`. Tier-0 artifacts hard-fail;
     /// Tier 1–3 density warns/fails.
@@ -105,6 +114,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             max_lines: Some(DEFAULT_MAX_LINES),
+            max_nesting: Some(DEFAULT_MAX_NESTING),
             slop_prose: true,
             prose_window: DEFAULT_PROSE_WINDOW,
             duplication: true,

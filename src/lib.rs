@@ -10,6 +10,7 @@ pub mod config;
 pub mod duplication;
 pub mod engine;
 pub mod finding;
+pub mod nesting;
 pub mod prop_graph;
 pub mod react;
 pub mod rules;

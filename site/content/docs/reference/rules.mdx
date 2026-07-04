@@ -21,6 +21,7 @@ Run `straitjacket --list-rules` to see them with their one-line descriptions.
 | `inline-font` | inline `font-family` **literal stacks** — a quoted font or a multi-family list (`Inter, sans-serif`). A token reference (`fontFamily: MONO`), a CSS variable, or a bare generic (`monospace`) is fine. Define the font once and reference a token. |
 | `motion` | ad-hoc `transition` / `animation` / `@keyframes` — centralize motion so it can be tuned or disabled. |
 | `file-size` | files longer than the line budget (default **1500**) — sprawling single files are a common LLM tell. Tune with `--max-lines`, disable with `--max-lines 0` or `--skip file-size`. |
+| `deep-nesting` | lines indented past the nesting budget (default **6**) — deeply nested logic is hard to follow. Depth is read off leading indentation (which is canonical when a formatter is enforced), so it's language-agnostic and needs no parser. A **warning**, not a hard fail. Runs on programming-language sources only (not markup/data). Tune with `--max-nesting`, disable with `--max-nesting 0` or `--skip deep-nesting`. |
 | `slop-prose` | LLM prose tells in `.md`/`.markdown`/`.mdx`/`.html`: machine artifacts hard-fail, and a high *density* of style tells warns or fails. Disable with `--skip slop-prose`. See [How slop-prose works](/docs/explanation/slop-prose). |
 | `duplication` | copy/pasted code across the tree — any clone of ≥ 50 tokens fails; **a structure may appear only once**. Compiled in (no external tool). Tune with `--dup-min-tokens`, disable with `--skip duplication`. See [Why duplication is compiled in](/docs/explanation/duplication). |
 
@@ -49,6 +50,7 @@ fails — and **0** when the scan is clean or found only warnings. Override with
 | setting | default | flag |
 |---------|---------|------|
 | file-size line budget | 1500 | `--max-lines` |
+| deep-nesting depth budget | 6 | `--max-nesting` |
 | slop-prose density window | 400 chars | `--prose-window` |
 | duplication minimum clone | 50 tokens | `--dup-min-tokens` |
 | scan `.json` | off | `--include-json` |

@@ -5,7 +5,8 @@ use std::process::ExitCode;
 use clap::{Parser, ValueEnum};
 
 use straitjacket::config::{
-    self, FileConfig, DEFAULT_DUP_MIN_TOKENS, DEFAULT_MAX_LINES, DEFAULT_PROSE_WINDOW,
+    self, FileConfig, DEFAULT_DUP_MIN_TOKENS, DEFAULT_MAX_LINES, DEFAULT_MAX_NESTING,
+    DEFAULT_PROSE_WINDOW,
 };
 use straitjacket::react::{extract_edges, ComponentIndex, REACT_EXTS};
 use straitjacket::walk::{collect_files, display_path, ext_of};
@@ -37,6 +38,10 @@ struct Cli {
     /// file-size rule's line budget. 0 disables the rule.
     #[arg(long)]
     max_lines: Option<usize>,
+
+    /// deep-nesting rule's indentation-depth budget. 0 disables the rule.
+    #[arg(long)]
+    max_nesting: Option<usize>,
 
     /// slop-prose density window, in characters.
     #[arg(long)]
@@ -96,6 +101,7 @@ struct Resolved {
     only: Vec<String>,
     skip: Vec<String>,
     max_lines: usize,
+    max_nesting: usize,
     prose_window: usize,
     dup_min_tokens: usize,
     include_json: bool,
@@ -111,6 +117,7 @@ impl Resolved {
     fn config(&self) -> Config {
         Config {
             max_lines: (self.max_lines > 0).then_some(self.max_lines),
+            max_nesting: (self.max_nesting > 0).then_some(self.max_nesting),
             slop_prose: true,
             prose_window: self.prose_window,
             duplication: true,
@@ -269,6 +276,10 @@ fn resolve(cli: &Cli) -> anyhow::Result<Resolved> {
             .max_lines
             .or(file.max_lines)
             .unwrap_or(DEFAULT_MAX_LINES),
+        max_nesting: cli
+            .max_nesting
+            .or(file.max_nesting)
+            .unwrap_or(DEFAULT_MAX_NESTING),
         prose_window: cli
             .prose_window
             .or(file.prose_window)

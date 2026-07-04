@@ -35,6 +35,14 @@ fn rules_hit(src: &str, ext: &str) -> Vec<String> {
     scan(src, ext).into_iter().map(|(r, _)| r).collect()
 }
 
+/// Rule ids that fired for a snippet under a specific (non-default) engine.
+fn rules_hit_with(e: &Engine, src: &str, ext: &str) -> Vec<String> {
+    e.scan_text(src, "test", ext)
+        .into_iter()
+        .map(|f| f.rule)
+        .collect()
+}
+
 // ---- emoji -------------------------------------------------------------------
 
 // Emoji in these fixtures are written as `\u{...}` escapes on purpose: it keeps the
@@ -168,6 +176,74 @@ fn file_size_can_be_skipped() {
     });
     e.skip(&["file-size".to_string()]);
     assert!(e.scan_text("a\nb\nc\nd\n", "big.ts", "ts").is_empty());
+}
+
+// ---- deep-nesting ------------------------------------------------------------
+
+fn nest_engine() -> Engine {
+    engine_with(Config {
+        max_nesting: Some(2),
+        ..Config::default()
+    })
+}
+
+#[test]
+fn flags_indentation_past_the_budget() {
+    // 2-space unit; the depth-3 line is over a budget of 2.
+    let src = "fn f() {\n  a\n    b\n      c\n}\n";
+    let f: Vec<_> = nest_engine()
+        .scan_text(src, "deep.rs", "rs")
+        .into_iter()
+        .filter(|f| f.rule == "deep-nesting")
+        .collect();
+    assert_eq!(f.len(), 1);
+    assert_eq!(f[0].line, 4);
+    assert_eq!(f[0].matched, "nesting depth 3");
+    assert_eq!(f[0].severity, Severity::Warning); // a warn, not a hard fail
+}
+
+#[test]
+fn nesting_within_budget_is_clean() {
+    let src = "fn f() {\n  a\n    b\n}\n";
+    assert!(!rules_hit_with(&nest_engine(), src, "rs").contains(&"deep-nesting".to_string()));
+}
+
+#[test]
+fn nesting_disabled_when_max_nesting_none() {
+    let e = engine_with(Config {
+        max_nesting: None,
+        ..Config::default()
+    });
+    let src = "fn f() {\n  a\n    b\n      c\n        d\n}\n";
+    assert!(!rules_hit_with(&e, src, "rs").contains(&"deep-nesting".to_string()));
+}
+
+#[test]
+fn nesting_ignores_markup_and_data_extensions() {
+    // Deeply-indented YAML/Markdown nest by nature — not a code smell.
+    let src = "a:\n  b:\n    c:\n      d:\n        e: 1\n";
+    assert!(nest_engine().scan_text(src, "deep.yaml", "yaml").is_empty());
+}
+
+#[test]
+fn nesting_line_marker_silences_the_offending_line() {
+    let src = "fn f() {\n  a\n    b\n      c // straitjacket-allow:deep-nesting\n}\n";
+    assert!(!rules_hit_with(&nest_engine(), src, "rs").contains(&"deep-nesting".to_string()));
+}
+
+#[test]
+fn nesting_file_marker_exempts_the_whole_file() {
+    let src = "// straitjacket-allow-file:deep-nesting generated\n\
+               fn f() {\n  a\n    b\n      c\n}\n";
+    assert!(!rules_hit_with(&nest_engine(), src, "rs").contains(&"deep-nesting".to_string()));
+}
+
+#[test]
+fn nesting_can_be_skipped() {
+    let mut e = nest_engine();
+    e.skip(&["deep-nesting".to_string()]);
+    let src = "fn f() {\n  a\n    b\n      c\n}\n";
+    assert!(e.scan_text(src, "deep.rs", "rs").is_empty());
 }
 
 // ---- color -------------------------------------------------------------------
