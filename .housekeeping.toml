@@ -1,2 +1,8 @@
 logo = "site/src/app/icon.png"  # fleet dashboard logo
 fleet = "zmaril/powderworks"
+
+[stray-files]
+# notes/danluu-review.md discusses TODO/TBD placeholders as prose (straitjacket's
+# own rules and review notes), not as tracked work. Point the todo file there so
+# stray-todos treats those markers as home rather than stray — no ignore list.
+todos = "notes/danluu-review.md"
