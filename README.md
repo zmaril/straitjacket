@@ -49,6 +49,8 @@ LLMs invent new tells constantly, and everyone's "Yuck!" is a little different. 
 - **New rules** — a deterministic smell that generalizes across repos.
 - **`slop-prose` in another language** — if you read it and can verify what actually sounds sloppy, say so in the issue (the docs' [slop-prose page](https://straitjacket.dev/docs/explanation/slop-prose) explains why it's English-only for now).
 
+Working on the code? Run `./scripts/dev.sh` once after cloning — it wires up the committed git hooks, builds the crate, and installs the docs site's dependencies.
+
 Prefer to talk it through first? [**Join the Discord**](https://discord.gg/5G6KvdJffj), or follow [**@ZackMaril** on X](https://x.com/ZackMaril).
 
 ## License

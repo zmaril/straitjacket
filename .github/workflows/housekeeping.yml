@@ -12,5 +12,5 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: zmaril/housekeeping@v0.14.0   # pin the full version, not the moving @v1
+      - uses: actions/checkout@v7
+      - uses: zmaril/housekeeping@v0.17.0   # pin the full version, not the moving @v1
