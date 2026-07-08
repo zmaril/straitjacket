@@ -28,3 +28,11 @@ updates:
       site-minor:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+    ignore:
+      # TypeScript 7.0 is the native (Go) compiler rewrite and ships no
+      # programmatic API, so Next.js and fumadocs/Volar can't consume it yet
+      # (Microsoft's own guidance is to stay on 6.x for now). Hold TypeScript
+      # at its current major — patch/minor still flow — and adopt the next
+      # major deliberately once the toolchain supports it.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
