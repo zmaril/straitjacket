@@ -12,6 +12,7 @@ use anyhow::Result;
 use regex::RegexSet;
 
 use crate::config::Config;
+use crate::dataflow::{self, DATAFLOW_EXTS, UNUSED_ASSIGNMENT_ID};
 use crate::finding::{Finding, Severity};
 use crate::nesting::{self, DEEP_NESTING_ID, NEST_EXTS};
 use crate::react::{
@@ -79,6 +80,9 @@ pub struct Engine {
     /// Cross-file component index for the forwarding rules; set by the caller after
     /// collecting the file list (the rules need every local component's props).
     component_index: Option<ComponentIndex>,
+    /// The experimental tree-sitter dataflow analysis (`unused-assignment`).
+    /// Opt-in via `--dataflow`; off by default.
+    dataflow: bool,
 }
 
 impl Engine {
@@ -119,6 +123,7 @@ impl Engine {
             prop_drilling: config.prop_drilling,
             store_passthrough: config.store_passthrough,
             component_index: None,
+            dataflow: config.dataflow,
         })
     }
 
@@ -172,6 +177,9 @@ impl Engine {
         if self.store_passthrough {
             ids.push(STORE_PASSTHROUGH_ID);
         }
+        if self.dataflow {
+            ids.push(UNUSED_ASSIGNMENT_ID);
+        }
         ids
     }
 
@@ -205,6 +213,9 @@ impl Engine {
             STORE_PASSTHROUGH_ID => Some(
                 "a store value passed unchanged into a child component — have the child read the store directly.".to_string(),
             ),
+            UNUSED_ASSIGNMENT_ID => Some(
+                "a value assigned to a local variable is never read before reassignment or scope end (experimental tree-sitter dataflow; enable with --dataflow).".to_string(),
+            ),
             _ => self
                 .rules
                 .iter()
@@ -231,6 +242,7 @@ impl Engine {
         self.prop_drilling = self.prop_drilling && ids.iter().any(|id| id == PROP_DRILLING_ID);
         self.store_passthrough =
             self.store_passthrough && ids.iter().any(|id| id == STORE_PASSTHROUGH_ID);
+        self.dataflow = self.dataflow && ids.iter().any(|id| id == UNUSED_ASSIGNMENT_ID);
         self.unknown(ids)
     }
 
@@ -265,6 +277,9 @@ impl Engine {
         if ids.iter().any(|id| id == STORE_PASSTHROUGH_ID) {
             self.store_passthrough = false;
         }
+        if ids.iter().any(|id| id == UNUSED_ASSIGNMENT_ID) {
+            self.dataflow = false;
+        }
         self.unknown(ids)
     }
 
@@ -282,6 +297,7 @@ impl Engine {
             EFFECT_ID,
             PROP_DRILLING_ID,
             STORE_PASSTHROUGH_ID,
+            UNUSED_ASSIGNMENT_ID,
         ]);
         ids.iter()
             .filter(|id| !known.contains(&id.as_str()))
@@ -303,6 +319,7 @@ impl Engine {
             || (self.nesting_enabled && NEST_EXTS.contains(&ext))
             || (self.slop_prose.is_some() && PROSE_EXTS.contains(&ext))
             || (self.react_enabled() && REACT_EXTS.contains(&ext))
+            || (self.dataflow && DATAFLOW_EXTS.contains(&ext))
     }
 
     fn react_enabled(&self) -> bool {
@@ -331,11 +348,13 @@ impl Engine {
         let nest_applies = self.nesting_enabled && NEST_EXTS.contains(&ext);
         let prose_applies = self.slop_prose.is_some() && PROSE_EXTS.contains(&ext);
         let react_applies = self.react_enabled() && REACT_EXTS.contains(&ext);
+        let dataflow_applies = self.dataflow && DATAFLOW_EXTS.contains(&ext);
         if applies.iter().all(|b| !b)
             && !size_applies
             && !nest_applies
             && !prose_applies
             && !react_applies
+            && !dataflow_applies
         {
             return findings;
         }
@@ -424,6 +443,20 @@ impl Engine {
                     if !allowed {
                         findings.push(f);
                     }
+                }
+            }
+        }
+
+        // Experimental tree-sitter dataflow (`unused-assignment`). Honour both
+        // file- and line-scoped allows, same idiom as the React rules.
+        if dataflow_applies && !file_allow.covers(UNUSED_ASSIGNMENT_ID) {
+            for f in dataflow::analyze(text, path, ext) {
+                let allowed = text
+                    .lines()
+                    .nth(f.line - 1)
+                    .is_some_and(|l| scope_covers(&line_scope(l), &f.rule));
+                if !allowed {
+                    findings.push(f);
                 }
             }
         }

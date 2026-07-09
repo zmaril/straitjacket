@@ -33,6 +33,8 @@ pub struct FileConfig {
     pub dup_min_tokens: Option<usize>,
     /// Also scan `.json` files.
     pub include_json: Option<bool>,
+    /// Run the experimental tree-sitter dataflow analysis (`unused-assignment`).
+    pub dataflow: Option<bool>,
     /// Don't respect `.gitignore` / hidden-file conventions.
     pub no_ignore: Option<bool>,
     /// Report findings but always exit 0.
@@ -109,6 +111,9 @@ pub struct Config {
     /// `store-passthrough`: a `use*Store` value must not be forwarded unchanged into
     /// a child component (the child should read the store directly).
     pub store_passthrough: bool,
+    /// `unused-assignment`: the experimental tree-sitter dataflow analysis. Off by
+    /// default (the one opt-in rule) while the prototype is calibrated.
+    pub dataflow: bool,
 }
 
 impl Default for Config {
@@ -125,6 +130,7 @@ impl Default for Config {
             effect_in_component: true,
             prop_drilling: true,
             store_passthrough: true,
+            dataflow: false,
         }
     }
 }

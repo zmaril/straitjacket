@@ -57,6 +57,11 @@ struct Cli {
     #[arg(long)]
     include_json: bool,
 
+    /// Enable the experimental tree-sitter dataflow analysis (the
+    /// unused-assignment rule, for Rust/TypeScript/Python). Off by default.
+    #[arg(long)]
+    dataflow: bool,
+
     /// Don't respect .gitignore / hidden-file conventions; scan everything.
     #[arg(long)]
     no_ignore: bool,
@@ -107,6 +112,7 @@ struct Resolved {
     prose_window: usize,
     dup_min_tokens: usize,
     include_json: bool,
+    dataflow: bool,
     no_ignore: bool,
     no_fail: bool,
 }
@@ -129,6 +135,7 @@ impl Resolved {
             effect_in_component: true,
             prop_drilling: true,
             store_passthrough: true,
+            dataflow: self.dataflow,
         }
     }
 }
@@ -319,6 +326,7 @@ fn resolve(cli: &Cli) -> anyhow::Result<Resolved> {
             .unwrap_or(DEFAULT_DUP_MIN_TOKENS),
         // Booleans: the file sets a baseline; a CLI flag can only turn it on.
         include_json: cli.include_json || file.include_json.unwrap_or(false),
+        dataflow: cli.dataflow || file.dataflow.unwrap_or(false),
         no_ignore: cli.no_ignore || file.no_ignore.unwrap_or(false),
         no_fail: cli.no_fail || file.no_fail.unwrap_or(false),
     })

@@ -7,6 +7,7 @@
 //! repo's CI. Each rule honours a same-line `straitjacket-allow` escape hatch.
 
 pub mod config;
+pub mod dataflow;
 pub mod duplication;
 pub mod engine;
 pub mod finding;
