@@ -13,4 +13,4 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - uses: zmaril/housekeeping@v0.18.0   # pin the full version, not the moving @v1
+      - uses: zmaril/housekeeping@v0.19.0   # pin the full version, not the moving @v1
