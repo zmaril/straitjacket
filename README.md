@@ -1,3 +1,5 @@
+<!-- housekeeper:description no! more! slop! -->
+<!-- housekeeper:topics agent, ai, ai-code-review, ai-detection, ai-slop-detection, amazing, ci, cli, code-quality, code-review, developer-tools, github-actions, impressive, linter, llm, rust, scanner, slop, static-analysis, wow -->
 # straitjacket
 
 <p align="center">
