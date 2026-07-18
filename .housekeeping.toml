@@ -12,3 +12,7 @@ todos = "notes/danluu-review.md"
 # (see the README quick-start); it deliberately lives at the repo root, not
 # under scripts/.
 allow = ["install.sh"]
+[allow-auto-merge]
+# Auto-merge is enabled on the repo so a green PR can land without a babysitter.
+# The check asserts GitHub's allow_auto_merge matches this declaration.
+enabled = true
