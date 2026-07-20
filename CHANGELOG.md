@@ -17,6 +17,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Suppressed-duplication tally** — when `straitjacket-allow[-file]:duplication`
+  markers hide copy/paste clones, the text output now prints an informational note
+  (`note: duplication: N clone(s) suppressed by allow-file markers (M files)`)
+  instead of dropping them silently. It never changes the exit code — a masked
+  pile of clones no longer reads as a clean zero in CI. Silent when nothing is
+  suppressed, and confined to the text format (JSON/SARIF are unchanged).
+
 - **Monorepo project boundaries** — drop a `.straitjacket.toml` file in a
   directory to mark it a *project*. The cross-file rules (`duplication`,
   `prop-drilling`, `store-passthrough`) partition on these boundaries and never

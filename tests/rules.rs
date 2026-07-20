@@ -657,6 +657,85 @@ fn duplication_still_flags_within_a_project_across_boundaries() {
     );
 }
 
+/// Write files into a fresh temp dir, run duplication over it, split off the clones a
+/// `straitjacket-allow[-file]` marker suppresses (the CLI's seam), clean up, and return
+/// the kept findings plus the suppressed tally. `files` is (name, contents) pairs.
+fn detect_dups_suppressed(
+    tag: &str,
+    files: &[(&str, String)],
+    min_tokens: usize,
+) -> (
+    Vec<straitjacket::Finding>,
+    straitjacket::duplication::SuppressedTally,
+) {
+    use std::fs;
+    let dir = std::env::temp_dir().join(format!("sj-{tag}-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    for (name, contents) in files {
+        fs::write(dir.join(name), contents).unwrap();
+    }
+    let dups = straitjacket::duplication::detect(std::slice::from_ref(&dir), true, min_tokens, &[]);
+    let result = straitjacket::duplication::partition_suppressed(dups);
+    let _ = fs::remove_dir_all(&dir);
+    result
+}
+
+/// A single identical block that clears the default duplication threshold on its own:
+/// well over 5 lines and over 50 tokens, so the clone fires at `DEFAULT_DUP_MIN_TOKENS`
+/// without a lowered budget.
+fn big_block(name: &str) -> String {
+    let mut s = format!("fn {name}() {{\n");
+    for i in 0..12 {
+        s.push_str(&format!("    let v{i} = {i} * 3 + 1;\n"));
+    }
+    s.push_str("    println!(\"{}\", v0 + v1 + v2 + v3 + v4 + v5);\n}\n");
+    s
+}
+
+#[test]
+fn duplication_suppressed_clone_is_counted_not_dropped() {
+    use straitjacket::config::DEFAULT_DUP_MIN_TOKENS;
+    // Two files share an identical >5-line, >50-token block that fires at the default
+    // threshold. One carries a whole-file `straitjacket-allow-file:duplication` marker
+    // (and sorts first, so cpd reports it as the clone's home). The clone must NOT surface
+    // as a finding, but it MUST be tallied: exactly the blind spot this feature closes — a
+    // masked clone that used to vanish uncounted.
+    let block = big_block("shared");
+    let marked = format!("// straitjacket-allow-file:duplication generated\n{block}");
+    let (kept, tally) = detect_dups_suppressed(
+        "dup-suppressed",
+        &[("a_marked.rs", marked), ("b_plain.rs", block)],
+        DEFAULT_DUP_MIN_TOKENS,
+    );
+    assert!(
+        kept.iter().all(|f| f.rule != "duplication"),
+        "the suppressed clone must not remain a finding, got {kept:?}"
+    );
+    assert_eq!(
+        tally.clones, 1,
+        "expected exactly one suppressed clone-pair"
+    );
+    assert_eq!(tally.files, 1, "expected one file to carry the marker");
+}
+
+#[test]
+fn duplication_unsuppressed_clone_is_not_tallied() {
+    use straitjacket::config::DEFAULT_DUP_MIN_TOKENS;
+    // No marker: the clone is a real finding and the suppressed tally stays empty.
+    let block = big_block("shared");
+    let (kept, tally) = detect_dups_suppressed(
+        "dup-unsuppressed",
+        &[("a.rs", block.clone()), ("b.rs", block)],
+        DEFAULT_DUP_MIN_TOKENS,
+    );
+    assert!(
+        kept.iter().any(|f| f.rule == "duplication"),
+        "an unmarked clone must still fire, got {kept:?}"
+    );
+    assert!(tally.is_empty(), "nothing was suppressed, got {tally:?}");
+}
+
 // ---- json skipping -----------------------------------------------------------
 
 #[test]

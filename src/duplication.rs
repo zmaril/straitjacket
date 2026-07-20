@@ -8,16 +8,71 @@
 //! cross-file, whole-run analysis, so it runs once over the scan paths rather than
 //! per file.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::fs;
 use std::path::PathBuf;
 
 use cpd_finder::orchestrate::{run, RunConfig};
 
+use crate::engine::is_suppressed;
 use crate::finding::{Finding, Severity};
 use crate::project::Projects;
 use crate::walk::ext_of;
 
 const RULE: &str = "duplication";
+
+/// How many duplication clone-pairs a run dropped because a `straitjacket-allow`
+/// / `straitjacket-allow-file` marker covered them, plus how many distinct files
+/// carried such a marker. Emitted as an informational note — it never affects the
+/// exit code — so a masked pile of clones stops being invisible in CI.
+#[derive(Debug, Default)]
+pub struct SuppressedTally {
+    /// Suppressed clone-pairs (one per dropped duplication finding).
+    pub clones: usize,
+    /// Distinct files carrying a marker that suppressed at least one clone.
+    pub files: usize,
+}
+
+impl SuppressedTally {
+    /// True when nothing was suppressed, so callers can stay silent.
+    pub fn is_empty(&self) -> bool {
+        self.clones == 0
+    }
+}
+
+/// Split a run's duplication findings into the ones that survive suppression (returned
+/// for reporting) and a tally of the ones a `straitjacket-allow[-file]:duplication`
+/// marker dropped. This is the seam that used to be a bare `filter` in `main`: the
+/// dropped clones were discarded uncounted, so a marker could mask any number of clones
+/// and CI still showed zero. Counting them here keeps the exit code unchanged while
+/// making the masked total visible.
+///
+/// A finding is suppressed exactly as the old filter decided: read the file that carries
+/// the clone and ask [`is_suppressed`]. An unreadable file is treated as *not* suppressed
+/// (the finding is kept), matching the previous `unwrap_or(true)` keep-predicate.
+pub fn partition_suppressed(dups: Vec<Finding>) -> (Vec<Finding>, SuppressedTally) {
+    let mut kept = Vec::new();
+    let mut suppressed_files: HashSet<String> = HashSet::new();
+    let mut clones = 0usize;
+    for f in dups {
+        let suppressed = fs::read_to_string(&f.path)
+            .map(|text| is_suppressed(&text, f.line, &f.rule))
+            .unwrap_or(false);
+        if suppressed {
+            clones += 1;
+            suppressed_files.insert(f.path.clone());
+        } else {
+            kept.push(f);
+        }
+    }
+    (
+        kept,
+        SuppressedTally {
+            clones,
+            files: suppressed_files.len(),
+        },
+    )
+}
 
 /// Run copy/paste detection, partitioning by project when boundaries are declared.
 ///
