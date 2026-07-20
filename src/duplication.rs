@@ -13,7 +13,6 @@ use std::fs;
 use std::path::PathBuf;
 
 use cpd_finder::orchestrate::{run, RunConfig};
-use serde::Serialize;
 
 use crate::engine::is_suppressed;
 use crate::finding::{Finding, Severity};
@@ -26,7 +25,7 @@ const RULE: &str = "duplication";
 /// / `straitjacket-allow-file` marker covered them, plus how many distinct files
 /// carried such a marker. Emitted as an informational note — it never affects the
 /// exit code — so a masked pile of clones stops being invisible in CI.
-#[derive(Debug, Default, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Default)]
 pub struct SuppressedTally {
     /// Suppressed clone-pairs (one per dropped duplication finding).
     pub clones: usize,

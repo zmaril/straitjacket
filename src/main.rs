@@ -193,7 +193,6 @@ fn main() -> ExitCode {
     let mut current_project: Option<Option<PathBuf>> = None;
 
     let mut findings: Vec<Finding> = Vec::new();
-    let mut dup_suppressed = duplication::SuppressedTally::default();
     for path in &files {
         let Some(ext) = ext_of(path) else { continue };
         if !engine.handles_ext(&ext) {
@@ -219,7 +218,7 @@ fn main() -> ExitCode {
     // *within* a project, so when boundaries are declared this runs once per project over
     // that project's files — never comparing across a package boundary. With no
     // boundaries it's a single pass over the scan paths, exactly as before.
-    if let Some(min_tokens) = engine.duplication() {
+    let dup_suppressed = if let Some(min_tokens) = engine.duplication() {
         let ignore: Vec<String> = if engine.skip_json() {
             vec!["**/*.json".to_string()]
         } else {
@@ -241,8 +240,10 @@ fn main() -> ExitCode {
         // masking a pile of clones is visible instead of silently reading as zero.
         let (kept, suppressed) = duplication::partition_suppressed(dups);
         findings.extend(kept);
-        dup_suppressed = suppressed;
-    }
+        suppressed
+    } else {
+        duplication::SuppressedTally::default()
+    };
 
     report(&resolved.format, &findings, files.len(), &dup_suppressed);
 
