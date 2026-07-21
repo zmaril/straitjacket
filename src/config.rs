@@ -37,6 +37,8 @@ pub struct FileConfig {
     pub no_ignore: Option<bool>,
     /// Report findings but always exit 0.
     pub no_fail: Option<bool>,
+    /// Fail when a `straitjacket-allow[-file]` marker suppresses nothing. On by default.
+    pub fail_on_unused_markers: Option<bool>,
 }
 
 /// Walk up from `start` (inclusive) looking for a config file; return the first
@@ -109,6 +111,9 @@ pub struct Config {
     /// `store-passthrough`: a `use*Store` value must not be forwarded unchanged into
     /// a child component (the child should read the store directly).
     pub store_passthrough: bool,
+    /// Emit an `unused-marker` error for any `straitjacket-allow[-file]` marker that
+    /// suppressed no findings — the analogue of clippy's unused `#[allow]`. On by default.
+    pub fail_on_unused_markers: bool,
 }
 
 impl Default for Config {
@@ -125,6 +130,7 @@ impl Default for Config {
             effect_in_component: true,
             prop_drilling: true,
             store_passthrough: true,
+            fail_on_unused_markers: true,
         }
     }
 }
@@ -144,6 +150,7 @@ prose-window: 600
 dup-min-tokens: 80
 include-json: true
 no-fail: true
+fail-on-unused-markers: false
 ";
         let c: FileConfig = serde_yaml::from_str(yaml).unwrap();
         assert_eq!(
@@ -156,6 +163,7 @@ no-fail: true
         assert_eq!(c.dup_min_tokens, Some(80));
         assert_eq!(c.include_json, Some(true));
         assert_eq!(c.no_fail, Some(true));
+        assert_eq!(c.fail_on_unused_markers, Some(false));
         assert_eq!(c.no_ignore, None);
     }
 

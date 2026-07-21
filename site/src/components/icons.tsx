@@ -1,4 +1,3 @@
-// straitjacket-allow-file:inline-svg  the blessed home for named, reusable brand icons
 // straitjacket-allow-file:one-component  an icon set, not a feature component
 import type { SVGProps } from "react";
 

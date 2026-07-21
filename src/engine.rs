@@ -39,6 +39,10 @@ const SLOP_PROSE_ID: &str = "slop-prose";
 /// Id of the cross-file copy/paste detector.
 const DUPLICATION_ID: &str = "duplication";
 
+/// Id of the synthetic rule that reports a suppression marker which suppressed nothing
+/// — straitjacket's analogue of clippy's unused `#[allow]`.
+pub const UNUSED_MARKER_ID: &str = "unused-marker";
+
 /// Extensions the `file-size` rule applies to — source, config and docs where a
 /// huge single file is a smell (not lockfiles, data dumps, or binaries).
 const SIZE_EXTS: &[&str] = &[
@@ -312,9 +316,26 @@ impl Engine {
             || self.store_passthrough
     }
 
-    /// Scan one file's text. `path` is the display path; `ext` is lowercased and
-    /// dot-free.
+    /// Scan one file's text, honouring every `straitjacket-allow[-file]` marker. `path`
+    /// is the display path; `ext` is lowercased and dot-free.
     pub fn scan_text(&self, text: &str, path: &str, ext: &str) -> Vec<Finding> {
+        self.scan_inner(text, path, ext, true)
+    }
+
+    /// The *candidate* findings for a file, ignoring every allow marker: what would be
+    /// reported if the file carried no suppression at all. Diffing this against
+    /// [`scan_text`](Self::scan_text) tells us exactly which would-be violations a marker
+    /// suppressed, which is how the `unused-marker` check learns whether a marker did
+    /// anything. Only worth computing for files that actually carry a marker.
+    pub fn scan_text_candidates(&self, text: &str, path: &str, ext: &str) -> Vec<Finding> {
+        self.scan_inner(text, path, ext, false)
+    }
+
+    /// Shared scan body. When `suppress` is true this is the normal scan; when false every
+    /// marker is ignored so the raw candidate set falls out (the two are diffed to attribute
+    /// suppression to individual markers). Visible behaviour is unchanged: the CLI always
+    /// calls the `suppress = true` path.
+    fn scan_inner(&self, text: &str, path: &str, ext: &str, suppress: bool) -> Vec<Finding> {
         let mut findings = Vec::new();
         if self.ext_skipped(ext) {
             return findings;
@@ -341,8 +362,10 @@ impl Engine {
         }
 
         // Whole-file `straitjacket-allow-file[:rule]` directives. Only pay for the
-        // line-by-line scan when the marker is actually present somewhere.
-        let file_allow = if text.contains(ALLOW_FILE) {
+        // line-by-line scan when the marker is actually present somewhere. In the
+        // candidate (`!suppress`) pass we deliberately keep this empty so nothing is
+        // suppressed.
+        let file_allow = if suppress && text.contains(ALLOW_FILE) {
             FileAllow::scan(text)
         } else {
             FileAllow::default()
@@ -356,7 +379,11 @@ impl Engine {
                 lineno: idx + 1,
                 path,
                 applies: &applies,
-                allow: line_scope(line),
+                allow: if suppress {
+                    line_scope(line)
+                } else {
+                    Scope::None
+                },
                 file_allow: &file_allow,
             };
 
@@ -391,10 +418,11 @@ impl Engine {
         // silences it (same idiom as the React rules below).
         if nest_applies && !file_allow.covers(DEEP_NESTING_ID) {
             for f in nesting::scan(text, path, self.max_nesting) {
-                let allowed = text
-                    .lines()
-                    .nth(f.line - 1)
-                    .is_some_and(|l| scope_covers(&line_scope(l), &f.rule));
+                let allowed = suppress
+                    && text
+                        .lines()
+                        .nth(f.line - 1)
+                        .is_some_and(|l| scope_covers(&line_scope(l), &f.rule));
                 if !allowed {
                     findings.push(f);
                 }
@@ -404,7 +432,7 @@ impl Engine {
         // Whole-text prose analyzer.
         if prose_applies && !file_allow.covers(SLOP_PROSE_ID) {
             if let Some(sp) = &self.slop_prose {
-                findings.extend(sp.scan(text, path));
+                findings.extend(sp.scan(text, path, suppress));
             }
         }
 
@@ -417,10 +445,11 @@ impl Engine {
             if one_component || effect || drilling || store {
                 let idx = self.component_index.as_ref();
                 for f in react::analyze(text, path, one_component, effect, drilling, store, idx) {
-                    let allowed = text
-                        .lines()
-                        .nth(f.line - 1)
-                        .is_some_and(|l| scope_covers(&line_scope(l), &f.rule));
+                    let allowed = suppress
+                        && text
+                            .lines()
+                            .nth(f.line - 1)
+                            .is_some_and(|l| scope_covers(&line_scope(l), &f.rule));
                     if !allowed {
                         findings.push(f);
                     }
@@ -568,6 +597,249 @@ pub fn is_suppressed(text: &str, line: usize, id: &str) -> bool {
     false
 }
 
+/// One suppression marker as it appears in a file: the line it sits on, whether it is a
+/// whole-file (`straitjacket-allow-file`) or a line-scoped (`straitjacket-allow`) marker,
+/// and the rule it names — `None` for a bare marker that covers every rule.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Marker {
+    /// 1-based line the marker sits on.
+    pub line: usize,
+    /// `true` for `straitjacket-allow-file`, `false` for a line-scoped `straitjacket-allow`.
+    pub file_level: bool,
+    /// The named rule, or `None` for a bare (all-rules) marker.
+    pub rule: Option<String>,
+}
+
+/// A would-be violation that a marker suppressed: the rule it belonged to and the 1-based
+/// line it sat on. This is what a marker has to have covered at least once to count as used.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Suppressed {
+    pub rule: String,
+    pub line: usize,
+}
+
+/// Every *deliberate* `straitjacket-allow[-file]` directive in `text`, in file order.
+///
+/// This is stricter than the suppression gate on purpose. Suppression treats any occurrence
+/// of the substring as a marker — harmless, because a line with no finding suppresses nothing
+/// anyway. The unused-marker check can't be that loose: straitjacket's own sources are
+/// saturated with the word (doc comments, the `ALLOW`/`ALLOW_FILE` constants, the
+/// `straitjacket-allow[:rule]` documentation notation, prose in the CHANGELOG), and flagging
+/// every mention would bury the signal. So a directive is only collected when it is *bounded*
+/// like a real one: preceded by start-of-line, whitespace, or comment punctuation (never a
+/// word char, backtick, or quote) and immediately followed by `:`, whitespace, or
+/// end-of-line (never `[`, a backtick, or a quote). Suppression semantics are untouched — this
+/// function feeds only the unused-marker reconciliation.
+pub fn collect_markers(text: &str) -> Vec<Marker> {
+    let mut out = Vec::new();
+    for (idx, line) in text.lines().enumerate() {
+        collect_line_markers(line, idx + 1, &mut out);
+    }
+    out
+}
+
+/// Whether the character just before a candidate marker is a legitimate boundary (so the token
+/// isn't part of a larger word, a quoted string, or backticked prose).
+fn valid_marker_prefix(c: Option<char>) -> bool {
+    match c {
+        None => true,
+        Some(c) => !c.is_alphanumeric() && !matches!(c, '`' | '"' | '\'' | '[' | '_'),
+    }
+}
+
+/// Whether the character just after the marker keyword makes it a real directive: a scope
+/// separator (`:`), the bracket form's `[` (`straitjacket-allow-file[:rule]`, a common mistake
+/// that resolves to *all rules* — worth catching), whitespace, or the end of the line. A
+/// backtick, quote, letter, or other punctuation means it's a mention, not a directive.
+fn valid_marker_suffix(c: Option<char>) -> bool {
+    matches!(c, None | Some(':') | Some('[')) || c.is_some_and(char::is_whitespace)
+}
+
+fn collect_line_markers(line: &str, lineno: usize, out: &mut Vec<Marker>) {
+    let mut search = 0;
+    while let Some(rel) = line[search..].find(ALLOW) {
+        let pos = search + rel;
+        search = pos + ALLOW.len();
+        let file_level = line[pos..].starts_with(ALLOW_FILE);
+        let kw_len = if file_level {
+            ALLOW_FILE.len()
+        } else {
+            ALLOW.len()
+        };
+        let before = line[..pos].chars().next_back();
+        let rest = &line[pos + kw_len..];
+        let after = rest.chars().next();
+        if !valid_marker_prefix(before) || !valid_marker_suffix(after) {
+            continue;
+        }
+        // An odd count of `"` or `` ` `` before the marker means it sits inside an open
+        // string or backtick span — a test fixture or an example embedded in a code string,
+        // not a directive (the closing quote may even land on a later continuation line).
+        // Skip it, so the check doesn't flag marker syntax that appears as data.
+        let head = &line[..pos];
+        if head.matches('"').count() % 2 == 1 || head.matches('`').count() % 2 == 1 {
+            continue;
+        }
+        let rule = match scope_from_rest(rest) {
+            Scope::All => None,
+            Scope::Only(id) => Some(id),
+            Scope::None => continue,
+        };
+        out.push(Marker {
+            line: lineno,
+            file_level,
+            rule,
+        });
+    }
+}
+
+/// Would marker `m` have suppressed the would-be violation `s`? Mirrors the suppression
+/// gate: a file-level marker covers a matching rule anywhere; a line-level marker covers a
+/// matching rule only on its own line. The `slop-prose` clause matches that rule's divergent
+/// raw-substring path (any marker sharing the artifact's line silences it, scope-agnostically),
+/// so a scope-mismatched marker that really did silence a slop artifact still reads as used.
+fn marker_covers(m: &Marker, s: &Suppressed) -> bool {
+    let rule_match = m.rule.as_deref().is_none_or(|id| id == s.rule);
+    if m.file_level {
+        rule_match || (m.line == s.line && s.rule == SLOP_PROSE_ID)
+    } else {
+        m.line == s.line && (rule_match || s.rule == SLOP_PROSE_ID)
+    }
+}
+
+impl Engine {
+    /// Is `id` an enabled rule that looks at files with extension `ext`? Covers every rule
+    /// family, including the whole-file and cross-file ones. `duplication` is cross-file, so
+    /// it is "active" for any file the scan reads (json is already excluded upstream).
+    fn rule_active_for_ext(&self, id: &str, ext: &str) -> bool {
+        match id {
+            FILE_SIZE_ID => self.file_size_enabled && SIZE_EXTS.contains(&ext),
+            DEEP_NESTING_ID => self.nesting_enabled && NEST_EXTS.contains(&ext),
+            SLOP_PROSE_ID => self.slop_prose.is_some() && PROSE_EXTS.contains(&ext),
+            DUPLICATION_ID => self.duplication.is_some(),
+            ONE_COMPONENT_ID => self.one_component && REACT_EXTS.contains(&ext),
+            EFFECT_ID => self.effect_in_component && REACT_EXTS.contains(&ext),
+            PROP_DRILLING_ID => self.prop_drilling && REACT_EXTS.contains(&ext),
+            STORE_PASSTHROUGH_ID => self.store_passthrough && REACT_EXTS.contains(&ext),
+            _ => self
+                .rules
+                .iter()
+                .enumerate()
+                .any(|(i, r)| r.id() == id && self.enabled[i] && r.applies_to_ext(ext)),
+        }
+    }
+
+    /// Does any enabled rule at all look at `ext`? Used to decide whether a bare (all-rules)
+    /// marker could possibly do anything on this file.
+    fn any_rule_active_for_ext(&self, ext: &str) -> bool {
+        self.duplication.is_some()
+            || (self.file_size_enabled && SIZE_EXTS.contains(&ext))
+            || (self.nesting_enabled && NEST_EXTS.contains(&ext))
+            || (self.slop_prose.is_some() && PROSE_EXTS.contains(&ext))
+            || (self.react_enabled() && REACT_EXTS.contains(&ext))
+            || self
+                .rules
+                .iter()
+                .enumerate()
+                .any(|(i, r)| self.enabled[i] && r.applies_to_ext(ext))
+    }
+
+    /// Whether a marker could conceivably suppress anything in a file of this extension.
+    /// A marker whose rule can't run here (e.g. a `color` marker in a Markdown file, where
+    /// `color` never applies) is *inert*, not unused: it is skipped, never flagged. This is
+    /// what keeps documentation that shows example markers from tripping the check.
+    fn marker_is_eligible(&self, m: &Marker, ext: &str) -> bool {
+        match &m.rule {
+            Some(id) => self.rule_active_for_ext(id, ext),
+            None => self.any_rule_active_for_ext(ext),
+        }
+    }
+
+    /// Turn the markers in one scanned file into `unused-marker` findings: one per marker
+    /// that suppressed nothing. `suppressed` is every would-be violation a marker dropped in
+    /// this file (per-file rules via the [`scan_text`](Self::scan_text) /
+    /// [`scan_text_candidates`](Self::scan_text_candidates) diff, plus any `duplication`
+    /// clones dropped in the cross-file pass). `dup_partner`, when set, is the
+    /// alphabetically-first file of a clone pair whose *second* file is this one — used to
+    /// explain that a `duplication` marker here is dead by construction.
+    pub fn unused_marker_findings(
+        &self,
+        path: &str,
+        ext: &str,
+        markers: &[Marker],
+        suppressed: &[Suppressed],
+        dup_partner: Option<&str>,
+    ) -> Vec<Finding> {
+        let mut out = Vec::new();
+        for m in markers {
+            if !self.marker_is_eligible(m, ext) {
+                continue;
+            }
+            if suppressed.iter().any(|s| marker_covers(m, s)) {
+                continue;
+            }
+            out.push(self.unused_finding(path, m, dup_partner));
+        }
+        out
+    }
+
+    /// Build the `unused-marker` finding for a single dead marker.
+    fn unused_finding(&self, path: &str, m: &Marker, dup_partner: Option<&str>) -> Finding {
+        let keyword = if m.file_level { ALLOW_FILE } else { ALLOW };
+        let matched = match &m.rule {
+            Some(id) => format!("{keyword}:{id}"),
+            None => keyword.to_string(),
+        };
+        // A wrong-side duplication marker: it names duplication (or is bare, which covers it)
+        // and lives on the *second* file of a clone pair, where the detector never reads it.
+        let targets_dup = m.rule.as_deref().is_none_or(|id| id == DUPLICATION_ID);
+        let message = match dup_partner {
+            Some(a) if targets_dup => format!(
+                "unused duplication marker — straitjacket reads the marker only on the \
+                 alphabetically-first file of a clone pair ({a}); this marker is on the second \
+                 file. Move it there or remove it."
+            ),
+            _ => {
+                let what = match &m.rule {
+                    Some(id) => id.as_str(),
+                    None => "all rules",
+                };
+                format!(
+                    "unused suppression marker ({what}) — it suppressed no findings; remove it."
+                )
+            }
+        };
+        Finding {
+            rule: UNUSED_MARKER_ID.to_string(),
+            path: path.to_string(),
+            line: m.line,
+            col: 1,
+            matched,
+            message,
+            severity: Severity::Error,
+        }
+    }
+}
+
+/// The would-be violations a file's markers suppressed, found by diffing the candidate
+/// findings (markers ignored) against the visible findings (markers honoured): anything in
+/// the candidate set that isn't visible was suppressed. Compared on `(rule, line, col)` so
+/// two findings from the same rule on the same line aren't conflated.
+pub fn suppressed_between(candidates: &[Finding], visible: &[Finding]) -> Vec<Suppressed> {
+    candidates
+        .iter()
+        .filter(|c| {
+            !visible
+                .iter()
+                .any(|v| v.rule == c.rule && v.line == c.line && v.col == c.col)
+        })
+        .map(|c| Suppressed {
+            rule: c.rule.clone(),
+            line: c.line,
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod suppress_tests {
     use super::is_suppressed;
@@ -598,5 +870,97 @@ mod suppress_tests {
     #[test]
     fn no_marker_is_not_suppressed() {
         assert!(!is_suppressed("just some code\n", 1, "duplication"));
+    }
+}
+
+#[cfg(test)]
+mod marker_tests {
+    use super::{collect_markers, suppressed_between, Marker, Suppressed};
+    use crate::finding::{Finding, Severity};
+
+    fn f(rule: &str, line: usize, col: usize) -> Finding {
+        Finding {
+            rule: rule.to_string(),
+            path: "t".to_string(),
+            line,
+            col,
+            matched: String::new(),
+            message: String::new(),
+            severity: Severity::Error,
+        }
+    }
+
+    #[test]
+    fn collects_a_scoped_file_directive() {
+        let m = collect_markers("// straitjacket-allow-file:duplication generated\ncode\n");
+        assert_eq!(
+            m,
+            vec![Marker {
+                line: 1,
+                file_level: true,
+                rule: Some("duplication".to_string()),
+            }]
+        );
+    }
+
+    #[test]
+    fn collects_a_scoped_line_directive() {
+        let m = collect_markers("code // straitjacket-allow:color\n");
+        assert_eq!(
+            m,
+            vec![Marker {
+                line: 1,
+                file_level: false,
+                rule: Some("color".to_string()),
+            }]
+        );
+    }
+
+    #[test]
+    fn bracket_form_is_a_bare_all_marker() {
+        // `[:rule]` doesn't parse as a scope (it starts with `[`, not `:`), so this common
+        // mistake resolves to *all rules* — and must still be recognized as a directive.
+        let m = collect_markers("/* straitjacket-allow-file[:duplication] */\n");
+        assert_eq!(
+            m,
+            vec![Marker {
+                line: 1,
+                file_level: true,
+                rule: None,
+            }]
+        );
+    }
+
+    #[test]
+    fn ignores_marker_syntax_inside_a_string() {
+        // An odd number of quotes before the token means it's string data, not a directive —
+        // the classic test-fixture shape, where a marker lives inside a source string.
+        assert!(collect_markers("let s = \"// straitjacket-allow:color\";\n").is_empty());
+        // A multi-line fixture string with the marker on the opening-quote line, too.
+        assert!(collect_markers(
+            "let src = \"// straitjacket-allow-file:color generated\\n\\\n  code\";\n"
+        )
+        .is_empty());
+    }
+
+    #[test]
+    fn ignores_backticked_prose_and_bracket_notation() {
+        // A backtick immediately around the token (inline code / prose) is not a directive.
+        assert!(collect_markers("the `straitjacket-allow` escape hatch\n").is_empty());
+        // Nor is the token buried in a longer word.
+        assert!(collect_markers("xstraitjacket-allow:color\n").is_empty());
+    }
+
+    #[test]
+    fn suppressed_between_diffs_on_position() {
+        let candidates = vec![f("color", 2, 1), f("emoji", 3, 5)];
+        let visible = vec![f("emoji", 3, 5)];
+        assert_eq!(
+            suppressed_between(&candidates, &visible),
+            vec![Suppressed {
+                rule: "color".to_string(),
+                line: 2,
+            }]
+        );
     }
 }

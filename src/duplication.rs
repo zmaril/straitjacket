@@ -8,16 +8,112 @@
 //! cross-file, whole-run analysis, so it runs once over the scan paths rather than
 //! per file.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::fs;
 use std::path::PathBuf;
 
 use cpd_finder::orchestrate::{run, RunConfig};
 
+use crate::engine::is_suppressed;
 use crate::finding::{Finding, Severity};
 use crate::project::Projects;
 use crate::walk::ext_of;
 
 const RULE: &str = "duplication";
+
+/// How many duplication clone-pairs a run dropped because a `straitjacket-allow`
+/// / `straitjacket-allow-file` marker covered them, plus how many distinct files
+/// carried such a marker. Emitted as an informational note — it never affects the
+/// exit code — so a masked pile of clones stops being invisible in CI.
+#[derive(Debug, Default)]
+pub struct SuppressedTally {
+    /// Suppressed clone-pairs (one per dropped duplication finding).
+    pub clones: usize,
+    /// Distinct files carrying a marker that suppressed at least one clone.
+    pub files: usize,
+}
+
+impl SuppressedTally {
+    /// True when nothing was suppressed, so callers can stay silent.
+    pub fn is_empty(&self) -> bool {
+        self.clones == 0
+    }
+}
+
+/// One detected clone pair: the finding straitjacket reports (anchored at `fragment_a`, the
+/// alphabetically-first file, exactly as before) plus the *second* file's path and line.
+/// The second file is retained because suppression only ever reads `fragment_a`, so a marker
+/// on the second file is dead by construction — the `unused-marker` check needs to see it to
+/// explain that.
+#[derive(Debug, Clone)]
+pub struct ClonePair {
+    /// The reported finding, anchored at `fragment_a`.
+    pub finding: Finding,
+    /// The `fragment_b` (alphabetically-later) file's display path.
+    pub b_path: String,
+    /// The clone's 1-based start line in `fragment_b`.
+    pub b_line: usize,
+}
+
+/// The outcome of reconciling a run's clone pairs against their `straitjacket-allow[-file]`
+/// markers: what survives, an informational tally of what a marker dropped, the would-be
+/// duplication violations that were suppressed (for the unused-marker reconciliation), and a
+/// `second-file → first-file` map so a dead marker on the wrong side of a clone can point at
+/// where it belongs.
+#[derive(Debug, Default)]
+pub struct DupReport {
+    /// Clones that survived suppression — the reported findings.
+    pub kept: Vec<Finding>,
+    /// How many clones a marker dropped, and across how many files.
+    pub tally: SuppressedTally,
+    /// `(fragment_a path, fragment_a line)` for every clone a marker on its home file dropped.
+    pub suppressed: Vec<(String, usize)>,
+    /// `fragment_b path → fragment_a path` over every clone (dead-marker side → live side).
+    pub second_file_partner: HashMap<String, String>,
+}
+
+/// Reconcile clone pairs against their markers. A clone is suppressed exactly as the old
+/// filter decided: read its home file (`fragment_a`) and ask [`is_suppressed`]. An unreadable
+/// file is treated as *not* suppressed (the finding is kept), matching the previous
+/// `unwrap_or(true)` keep-predicate.
+pub fn partition(pairs: Vec<ClonePair>) -> DupReport {
+    let mut report = DupReport::default();
+    let mut suppressed_files: HashSet<String> = HashSet::new();
+    for pair in pairs {
+        // Record the wrong-side mapping for every clone (keep the smallest home path when a
+        // second file belongs to several clones, so the message is deterministic).
+        report
+            .second_file_partner
+            .entry(pair.b_path.clone())
+            .and_modify(|a| {
+                if pair.finding.path < *a {
+                    *a = pair.finding.path.clone();
+                }
+            })
+            .or_insert_with(|| pair.finding.path.clone());
+
+        let f = pair.finding;
+        let suppressed = fs::read_to_string(&f.path)
+            .map(|text| is_suppressed(&text, f.line, &f.rule))
+            .unwrap_or(false);
+        if suppressed {
+            report.tally.clones += 1;
+            suppressed_files.insert(f.path.clone());
+            report.suppressed.push((f.path.clone(), f.line));
+        } else {
+            report.kept.push(f);
+        }
+    }
+    report.tally.files = suppressed_files.len();
+    report
+}
+
+/// Backwards-compatible split into surviving findings and the suppressed tally. A thin
+/// wrapper over [`partition`] for callers that don't need the wrong-side detail.
+pub fn partition_suppressed(pairs: Vec<ClonePair>) -> (Vec<Finding>, SuppressedTally) {
+    let report = partition(pairs);
+    (report.kept, report.tally)
+}
 
 /// Run copy/paste detection, partitioning by project when boundaries are declared.
 ///
@@ -38,7 +134,7 @@ pub fn detect_partitioned(
     respect_ignore: bool,
     min_tokens: usize,
     ignore: &[String],
-) -> Vec<Finding> {
+) -> Vec<ClonePair> {
     if !projects.is_partitioned() {
         return detect(scan_paths, respect_ignore, min_tokens, ignore);
     }
@@ -79,7 +175,7 @@ pub fn detect(
     respect_ignore: bool,
     min_tokens: usize,
     ignore: &[String],
-) -> Vec<Finding> {
+) -> Vec<ClonePair> {
     let config = RunConfig {
         paths: paths.to_vec(),
         min_tokens,
@@ -98,18 +194,23 @@ pub fn detect(
             let a = clone.fragment_a;
             let b = clone.fragment_b;
             let lines = a.end.line.saturating_sub(a.start.line) + 1;
-            Finding {
+            let b_path = tidy(&b.source_id);
+            let b_line = b.start.line as usize;
+            let finding = Finding {
                 rule: RULE.to_string(),
                 path: tidy(&a.source_id),
                 line: a.start.line as usize,
                 col: a.start.column as usize,
                 matched: format!("{lines} lines, {} tokens", clone.token_count),
                 message: format!(
-                    "duplicated code — this block also appears at {}:{}. LLMs clone-and-tweak; factor out a shared helper.",
-                    tidy(&b.source_id),
-                    b.start.line
+                    "duplicated code — this block also appears at {b_path}:{b_line}. LLMs clone-and-tweak; factor out a shared helper.",
                 ),
                 severity: Severity::Error,
+            };
+            ClonePair {
+                finding,
+                b_path,
+                b_line,
             }
         })
         .collect()

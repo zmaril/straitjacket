@@ -67,15 +67,17 @@ impl SlopProse {
         }
     }
 
-    /// Analyze one document. `path` is the display path.
-    pub fn scan(&self, text: &str, path: &str) -> Vec<Finding> {
+    /// Analyze one document. `path` is the display path. When `suppress` is false the
+    /// per-line allow markers are ignored, yielding the raw candidate findings the engine
+    /// uses to decide which markers actually suppressed something.
+    pub fn scan(&self, text: &str, path: &str, suppress: bool) -> Vec<Finding> {
         let mut out = Vec::new();
 
         // Tier 0: any artifact match hard-fails, unless its line is allow-marked.
         for art in &self.artifacts {
             for m in art.re.find_iter(text) {
                 let (line, col) = line_col(text, m.start());
-                if line_allow_marked(text, m.start()) {
+                if suppress && line_allow_marked(text, m.start()) {
                     continue;
                 }
                 out.push(Finding {

@@ -82,5 +82,9 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - name: install (frozen lockfile)
         run: bun install --frozen-lockfile
+      - name: lint + format (biome)
+        run: bunx @biomejs/biome check .
+      - name: test
+        run: bun test
       - name: build
         run: bun run build
