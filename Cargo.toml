@@ -24,7 +24,7 @@ oxc_ast = "0.139"
 oxc_ast_visit = "0.139"
 oxc_parser = "0.139"
 oxc_semantic = "0.139"
-oxc_span = "0.139"
+oxc_span = "0.141"
 oxc_syntax = "0.139"
 regex = "1"
 serde = { version = "1", features = ["derive"] }
